@@ -8,7 +8,7 @@
 
 % convenience functions for message construction
 -module(coap_message).
--export([non/0, non/1, ack/1, content/3, not_found/1, method_not_allowed/1]).
+-export([non/0, non/1, ack/1, response/2, response/3, content/3]).
 
 -include("coap.hrl").
 
@@ -30,21 +30,17 @@ ack(Request) ->
         token=Request#coap_message.token
     }.
 
+response(Method, Message) ->
+    Message#coap_message{method=Method}.
+
+response(Method, Payload, Message) ->
+    Message#coap_message{method=Method, payload=Payload}.
+
 content(Type, Payload, Message) ->
     Message#coap_message{
         method=content,
         options=[{content_format, [Type]}|Message#coap_message.options],
         payload=Payload
-    }.
-
-not_found(Message) ->
-    Message#coap_message{
-        method=not_found
-    }.
-
-method_not_allowed(Message) ->
-    Message#coap_message{
-        method=method_not_allowed
     }.
 
 % end of file

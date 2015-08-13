@@ -61,7 +61,7 @@ handle_cast(Request, State) ->
     {noreply, State}.
 
 handle_info({coap_request, From, Request=#coap_message{method='get'}}, State=#state{reg=Reg}) ->
-    coap_exchange:reply_content(From, Request, "application/link-format", format_links(Reg)),
+    coap_exchange:reply_content(From, Request, <<"application/link-format">>, format_links(Reg)),
     {noreply, State};
 handle_info({coap_request, From, Request}, State) ->
     coap_exchange:reply(From, Request, method_not_allowed),

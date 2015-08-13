@@ -11,14 +11,17 @@
 
 -include("coap.hrl").
 
--export([send_message/2, reply/3, reply_content/4]).
+-export([send_message/2, reply/3, reply/4, reply_content/4]).
 
-reply({_Pid, Sender}, Request=#coap_message{type=non}, Method) ->
-    Response = coap_message:Method(coap_message:non(Request)),
+reply(Source, Request, Method) ->
+    reply(Source, Request, Method, <<>>).
+
+reply({_Pid, Sender}, Request=#coap_message{type=non}, Method, Payload) ->
+    Response = coap_message:response(Method, Payload, coap_message:non(Request)),
     coap_endpoint:start_exchange(Sender, Response);
 
-reply({Pid, _Sender}, Request=#coap_message{type=con}, Method) ->
-    Response = coap_message:Method(coap_message:ack(Request)),
+reply({Pid, _Sender}, Request=#coap_message{type=con}, Method, Payload) ->
+    Response = coap_message:response(Method, Payload, coap_message:ack(Request)),
     coap_exchange:send_message(Pid, Response).
 
 reply_content({_Pid, Sender}, Request=#coap_message{type=non}, Type, Content) ->

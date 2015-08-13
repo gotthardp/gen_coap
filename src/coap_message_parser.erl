@@ -21,7 +21,7 @@
 
 % empty message
 decode(<<?VERSION:2, Type:2, 0:4, 0:3, 0:5, MsgId:16, Tail/bytes>>) ->
-    {Options, undefined} = decode_option_list(Tail),
+    {Options, <<>>} = decode_option_list(Tail),
     #coap_message{
         type=decode_type(Type),
         id=MsgId,
@@ -32,22 +32,19 @@ decode(<<?VERSION:2, Type:2, TKL:4, Class:3, Code:5, MsgId:16, Token:TKL/bytes, 
         type=decode_type(Type),
         method=decode_enum(methods(), {Class, Code}),
         id=MsgId,
-        token=if TKL > 0 -> Token; true -> undefined end,
+        token=Token,
         options=Options,
         payload=Payload}.
 
 % empty message
 encode(#coap_message{type=Type, method=undefined, id=MsgId, options=Options}) ->
-    Tail = encode_option_list(Options, undefined),
+    Tail = encode_option_list(Options, <<>>),
     <<?VERSION:2, (encode_type(Type)):2, 0:4, 0:3, 0:5, MsgId:16, Tail/bytes>>;
 encode(#coap_message{type=Type, method=Method, id=MsgId, token=Token, options=Options, payload=Payload}) ->
-    {TKL, Token1} = if
-        Token == undefined -> {0, <<>>};
-        true -> {byte_size(Token), Token}
-    end,
+    TKL = byte_size(Token),
     {Class, Code} = encode_enum(methods(), Method),
     Tail = encode_option_list(Options, Payload),
-    <<?VERSION:2, (encode_type(Type)):2, TKL:4, Class:3, Code:5, MsgId:16, Token1:TKL/bytes, Tail/bytes>>.
+    <<?VERSION:2, (encode_type(Type)):2, TKL:4, Class:3, Code:5, MsgId:16, Token:TKL/bytes, Tail/bytes>>.
 
 decode_type(0) -> con;
 decode_type(1) -> non;
@@ -88,12 +85,12 @@ methods() ->
     {{5,05}, proxying_not_supported}].
 
 content_formats() ->
-    [{0, "text/plain"},
-    {40, "application/link-format"},
-    {41, "application/xml"},
-    {42, "application/octet-stream"},
-    {47, "application/exi"},
-    {50, "application/json"}].
+    [{0, <<"text/plain">>},
+    {40, <<"application/link-format">>},
+    {41, <<"application/xml">>},
+    {42, <<"application/octet-stream">>},
+    {47, <<"application/exi">>},
+    {50, <<"application/json">>}].
 
 decode_enum(Dict, Value) ->
     decode_enum(Dict, Value, undefined).
@@ -118,7 +115,7 @@ decode_option_list(Tail) ->
     decode_option_list(Tail, 0, []).
 
 decode_option_list(<<>>, _LastNum, OptionList) ->
-    {OptionList, undefined};
+    {OptionList, <<>>};
 
 decode_option_list(<<16#FF, Payload/bytes>>, _LastNum, OptionList) ->
     {OptionList, Payload};
@@ -155,7 +152,7 @@ decode_option_list(<<Delta:4, Len:4, Tail/bytes>>, LastNum, OptionList) ->
 append_option({SameOptId, OptVal2}, [{SameOptId, OptVal1} | OptionList]) -> [{SameOptId, OptVal1++[OptVal2]} | OptionList];
 append_option({OptId2, OptVal2}, OptionList) -> [{OptId2, [OptVal2]} | OptionList].
 
-encode_option_list(Options, undefined) ->
+encode_option_list(Options, <<>>) ->
     encode_option_list1(Options);
 encode_option_list(Options, Payload) ->
     <<(encode_option_list1(Options))/bytes, 16#FF, Payload/bytes>>.
@@ -238,7 +235,7 @@ codec_test_()-> [
     test_codec(#coap_message{type=non, method='put', id=200, token= <<"token">>,
         options=[{uri_path,[".well-known", "core"]}]}),
     test_codec(#coap_message{type=non, method='content', id=200, token= <<"token">>,
-        payload= <<"<url>">>, options=[{content_format, ["application/link-format"]}, {uri_path,[".well-known", "core"]}]})].
+        payload= <<"<url>">>, options=[{content_format, [<<"application/link-format">>]}, {uri_path,[".well-known", "core"]}]})].
 
 test_codec(Message) ->
     Message2 = encode(Message),
