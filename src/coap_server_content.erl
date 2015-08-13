@@ -13,7 +13,7 @@
 
 -export([start_link/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
--export([add_handler/3, get_handler/1]).
+-export([add_handler/4, get_handler/1]).
 
 -include("coap.hrl").
 
@@ -22,8 +22,8 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-add_handler(UriPath, Public, Process) ->
-    gen_server:call(?MODULE, {add_handler, UriPath, Public, Process}).
+add_handler(Process, UriPath, Attrs, Public) ->
+    gen_server:call(?MODULE, {add_handler, Process, UriPath, Attrs, Public}).
 
 get_handler(Message) ->
     UriPath = proplists:get_value(uri_path, Message#coap_message.options, []),
@@ -32,15 +32,15 @@ get_handler(Message) ->
 init(_Args) ->
     {ok, #state{reg=
         % RFC 6690, Section 4
-        [{[".well-known", "core"], true, ?MODULE}]
+        [{?MODULE, [".well-known", "core"], [], true}]
     }}.
 
-handle_call({add_handler, UriPath, Public, Process}, _From, State=#state{reg=Reg}) ->
-    {reply, ok, State#state{reg=[{UriPath, Public, Process} | Reg]}};
+handle_call({add_handler, Process, UriPath, Attrs, Public}, _From, State=#state{reg=Reg}) ->
+    {reply, ok, State#state{reg=[{Process, UriPath, Attrs, Public} | Reg]}};
 
 handle_call({get_handler, UriPath}, _From, State=#state{reg=Reg}) ->
     case lists:foldl(
-        fun(Entry={RegisteredUri, _, _}, Acc) ->
+        fun(Entry={_, RegisteredUri, _, _}, Acc) ->
             case {lists:sublist(UriPath, length(RegisteredUri)), Acc} of
                 {RegisteredUri, undefined} -> Entry;
                 {RegisteredUri, {BestUri, _}} ->
@@ -52,7 +52,7 @@ handle_call({get_handler, UriPath}, _From, State=#state{reg=Reg}) ->
             end
         end, undefined, Reg)
     of
-        {_, _, Res} -> {reply, Res, State};
+        {Res, _, _, _} -> {reply, Res, State};
         undefined -> {reply, undefined, State}
     end.
 
@@ -78,9 +78,18 @@ terminate(_Reason, _State) ->
 % encode in the CoRE Link Format (RFC 6690)
 format_links(Reg) ->
     Resources = lists:filtermap(
-        fun({UriList, true, _}) -> {true, "<"++string:join(UriList, "/")++">"};
-            ({_, false, _}) -> false
+        fun({_, UriList, Attrs, true}) -> {true, encode_link_value(UriList, Attrs)};
+            ({_, _, _, false}) -> false
         end, Reg),
-    list_to_binary(string:join(Resources, ',')).
+    list_to_binary(string:join(Resources, ",")).
+
+encode_link_value(UriList, Attrs) ->
+    lists:foldl(
+        fun(Attr, Acc) -> Acc ++ encode_link_param(Attr) end,
+        encode_link_uri(UriList), Attrs).
+
+encode_link_uri(UriList) -> "</"++string:join(UriList, "/")++">".
+
+encode_link_param({rt, Value}) -> ";rt=\"" ++ Value ++ "\"".
 
 % end of file

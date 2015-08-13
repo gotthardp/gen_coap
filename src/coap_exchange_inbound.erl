@@ -78,20 +78,22 @@ init_con({in, BinMessage}, Data=#state{peer=Peer, handler=undefined}) ->
             {next_state, ack_sent, Data#state{ack=BinAck}};
         Handler ->
             Handler ! {coap_request, {self(), Peer}, Message},
-            AckTimer = gen_fsm:start_timer(?PROCESSING_DELAY, timeout),
+            AckTimer = gen_fsm:start_timer(?PROCESSING_DELAY, ack),
             {next_state, await_ack, Data#state{handler=Handler, atimer=AckTimer}}
     end;
 init_con({in, BinMessage}, Data=#state{peer=Peer, handler=Handler}) ->
     Message = coap_message_parser:decode(BinMessage),
     io:fwrite("=> ~p~n", [Message]),
     Handler ! {coap_request, {self(), Peer}, Message},
-    AckTimer = gen_fsm:start_timer(?PROCESSING_DELAY, timeout),
+    AckTimer = gen_fsm:start_timer(?PROCESSING_DELAY, ack),
     {next_state, await_ack, Data#state{atimer=AckTimer}}.
 
 await_ack({in, _BinMessage}, Data) ->
     % ignore request retransmission
     {next_state, await_ack, Data};
-await_ack(timeout, Data) -> crash;
+await_ack({timeout, AckTimer, ack}, Data=#state{atimer=AckTimer}) ->
+    %% FIXME: send ack?
+    {next_state, ack_sent, Data};
 
 await_ack({out, Ack}, Data=#state{peer=Peer, atimer=AckTimer}) ->
     io:fwrite("<- ~p~n", [Ack]),
