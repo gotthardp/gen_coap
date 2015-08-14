@@ -23,6 +23,6 @@ Rules.
 =  : {token, {'=', TokenLine}}.
 
 {PCHAR}+  : {token, {segment, TokenLine, TokenChars}}.
-"[^"]*"   : {token, {string, TokenLine, TokenChars}}.
+"[^"]*"   : {token, {string, TokenLine, string:strip(TokenChars, both, $\")}}.
 
 Erlang code.

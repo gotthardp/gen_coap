@@ -72,8 +72,9 @@ init_con({in, BinMessage}, Data=#state{peer=Peer, handler=undefined}) ->
     % we are acting as a server, use the request to determine the handler
     case coap_server_content:get_handler(Message) of
         undefined ->
-            io:fwrite("<- ~p~n", [Message]),
-            BinAck = coap_message_parser:encode(coap_message:response(not_found, coap_message:ack(Message))),
+            Ack = coap_message:response(not_found, coap_message:ack(Message)),
+            io:fwrite("<- ~p~n", [Ack]),
+            BinAck = coap_message_parser:encode(Ack),
             coap_endpoint:send_message(Peer, BinAck),
             {next_state, ack_sent, Data#state{ack=BinAck}};
         Handler ->

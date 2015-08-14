@@ -16,6 +16,7 @@
 
 -define(OPTION_OBSERVE, 6). % draft-ietf-core-observe-16
 -define(OPTION_URI_PATH, 11).
+-define(OPTION_URI_QUERY, 15).
 -define(OPTION_CONTENT_FORMAT, 12).
 -define(OPTION_ACCEPT, 17).
 
@@ -199,6 +200,8 @@ decode_option(?OPTION_URI_PATH, OptVal) ->
 decode_option(?OPTION_CONTENT_FORMAT, OptVal) ->
     Num = binary:decode_unsigned(OptVal),
     {content_format, decode_enum(content_formats(), Num, Num)};
+decode_option(?OPTION_URI_QUERY, OptVal) ->
+    {uri_query, binary_to_list(OptVal)};
 decode_option(?OPTION_ACCEPT, OptVal) ->
     {'accept', binary:decode_unsigned(OptVal)};
 % draft-ietf-core-observe-16
@@ -216,6 +219,8 @@ encode_option({content_format, OptVal}) when is_integer(OptVal) ->
 encode_option({content_format, OptVal}) ->
     Num = encode_enum(content_formats(), OptVal),
     {?OPTION_CONTENT_FORMAT, binary:encode_unsigned(Num)};
+encode_option({uri_query, OptVal}) ->
+    {?OPTION_URI_QUERY, list_to_binary(OptVal)};
 encode_option({'accept', OptVal}) ->
     {?OPTION_ACCEPT, binary:encode_unsigned(OptVal)};
 % draft-ietf-core-observe-16
