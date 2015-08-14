@@ -1,10 +1,7 @@
 .eunit
-deps
-*.o
-*.beam
-*.plt
-erl_crash.dump
-ebin
-rel/example_project
-.concrete/DEV_MODE
 .rebar
+deps
+ebin
+src/core_link_scanner.erl
+src/core_link_parser.erl
+erl_crash.dump
