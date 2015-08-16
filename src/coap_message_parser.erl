@@ -166,6 +166,8 @@ encode_option_list1(Options) ->
     % the sort is stable; it maintains relative order of values with equal keys
     encode_option_list(lists:keysort(1, Options1), 0, <<>>).
 
+split_and_encode_option({OptId, [undefined | OptVals]}) ->
+    split_and_encode_option({OptId, OptVals});
 split_and_encode_option({OptId, [OptVal1 | OptVals]}) ->
     [encode_option({OptId, OptVal1}) | split_and_encode_option({OptId, OptVals})];
 split_and_encode_option({_OptId, []}) ->

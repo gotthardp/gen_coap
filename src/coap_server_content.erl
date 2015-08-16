@@ -60,11 +60,11 @@ handle_cast(Request, State) ->
     io:fwrite("unknown cast ~p~n", [Request]),
     {noreply, State}.
 
-handle_info({coap_request, From, Request=#coap_message{method='get'}}, State=#state{reg=Reg}) ->
-    coap_exchange:reply_content(From, Request, <<"application/link-format">>, format_links(Reg)),
+handle_info({coap_request, Pid, Peer, Request=#coap_message{method='get'}}, State=#state{reg=Reg}) ->
+    coap_exchange:reply_content(Pid, Peer, Request, <<"application/link-format">>, format_links(Reg)),
     {noreply, State};
-handle_info({coap_request, From, Request}, State) ->
-    coap_exchange:reply(From, Request, method_not_allowed),
+handle_info({coap_request, Pid, Peer, Request}, State) ->
+    coap_exchange:reply(Pid, Peer, Request, method_not_allowed),
     {noreply, State};
 handle_info(_Unknown, State) ->
     {noreply, State}.

@@ -12,7 +12,7 @@
 
 -include("coap.hrl").
 
--export([start_link/4, handle_message/2]).
+-export([start_link/5, handle_message/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, code_change/4, terminate/3]).
 -export([init_non/2, sent_non/2]).
 -export([init_con/2, await_ack/2, ack_sent/2]).
@@ -24,27 +24,28 @@
 -define(EXCHANGE_LIFETIME, 247000).
 -define(NON_LIFETIME, 145000).
 
--record(state, {peer, handler, id, msg, retry_time, retry_count}).
+-record(state, {peer, handler, data, id, msg, retry_time, retry_count}).
 
-start_link(MsgId, Type, Peer, Handler) ->
-    gen_fsm:start_link(?MODULE, [MsgId, Type, Peer, Handler], []).
+start_link(MsgId, Type, Peer, Handler, UserData) ->
+    gen_fsm:start_link(?MODULE, [MsgId, Type, Peer, Handler, UserData], []).
 
 handle_message(Pid, BinMessage) ->
     gen_fsm:send_event(Pid, {in, BinMessage}).
 
-init([MsgId, non, Peer, Handler]) ->
+init([MsgId, non, Peer, Handler, UserData]) ->
     gen_fsm:send_event_after(?NON_LIFETIME, expired),
-    {ok, init_non, #state{id=MsgId, peer=Peer, handler=Handler}};
+    {ok, init_non, #state{id=MsgId, peer=Peer, handler=Handler, data=UserData}};
 
-init([MsgId, con, Peer, Handler]) ->
+init([MsgId, con, Peer, Handler, UserData]) ->
     gen_fsm:send_event_after(?EXCHANGE_LIFETIME, expired),
-    {ok, init_con, #state{id=MsgId, peer=Peer, handler=Handler}}.
+    {ok, init_con, #state{id=MsgId, peer=Peer, handler=Handler, data=UserData}}.
 
 %% --- without reliability (NON)
 
 init_non({out, Message}, Data=#state{peer=Peer, id=MsgId}) ->
-    io:fwrite("<= ~p~n", [Message]),
-    BinMessage = coap_message_parser:encode(Message#coap_message{id = MsgId}),
+    Message2 = Message#coap_message{id = MsgId},
+    io:fwrite("<= ~p~n", [Message2]),
+    BinMessage = coap_message_parser:encode(Message2),
     coap_endpoint:send_message(Peer, BinMessage),
     {next_state, sent_non, Data}.
 sent_non(expired, Data)->
@@ -52,25 +53,29 @@ sent_non(expired, Data)->
 
 %% --- reliabile (CON)
 
-init_con({out, Message}, Data=#state{peer=Peer}) ->
-    io:fwrite("<= ~p~n", [Message]),
-    BinMessage = coap_message_parser:encode(Message),
+init_con({out, Message}, Data=#state{peer=Peer, id=MsgId}) ->
+    Message2 = Message#coap_message{id = MsgId},
+    io:fwrite("<= ~p~n", [Message2]),
+    BinMessage = coap_message_parser:encode(Message2),
     coap_endpoint:send_message(Peer, BinMessage),
     random:seed(os:timestamp()),
     Timeout = ?ACK_TIMEOUT+random:uniform(?ACK_RANDOM_FACTOR),
-    {next_state, await_ack, Data#state{msg=BinMessage, retry_time=Timeout, retry_count=0}, Timeout}.
+    {next_state, await_ack, Data#state{msg=Message2, retry_time=Timeout, retry_count=0}, Timeout}.
 
-await_ack({in, BinAck}, Data=#state{peer=Peer, handler=Handler}) ->
+await_ack({in, BinAck}, Data=#state{peer=Peer, handler=Handler, data=UserData}) ->
     Ack = coap_message_parser:decode(BinAck),
     io:fwrite("-> ~p~n", [Ack]),
-    Handler ! {coap_response, {self(), Peer}, Ack},
+    Handler ! {coap_response, self(), Peer, UserData, Ack},
     {next_state, ack_sent, Data};
-await_ack(timeout, Data=#state{peer=Peer, msg=BinMessage, retry_time=Timeout, retry_count=Count}) when Count < ?MAX_RETRANSMIT ->
+await_ack(timeout, Data=#state{peer=Peer, msg=Message, retry_time=Timeout, retry_count=Count}) when Count < ?MAX_RETRANSMIT ->
+    BinMessage = coap_message_parser:encode(Message),
     coap_endpoint:send_message(Peer, BinMessage),
     Timeout2 = Timeout*2,
     {next_state, await_ack, Data#state{retry_time=Timeout2, retry_count=Count+1}, Timeout2};
-await_ack(timeout, Data) ->
-    % TODO: pass error to sender
+await_ack(timeout, Data=#state{peer=Peer, handler=Handler, data=UserData, id=MsgId}) ->
+    Ack = #coap_message{type=reset, id=MsgId},
+    io:fwrite("[timeout] -> ~p~n", [Ack]),
+    Handler ! {coap_response, self(), Peer, UserData, Ack},
     {next_state, ack_sent, Data};
 await_ack(expired, Data)->
     {stop, normal, Data}.

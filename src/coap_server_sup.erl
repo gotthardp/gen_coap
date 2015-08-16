@@ -21,7 +21,7 @@ start_link(InPort) ->
     InExPid = child(SupPid, coap_exchange_inbound),
     OutExPid = child(SupPid, coap_exchange_outbound),
     supervisor:start_child(SupPid, 
-        {coap_endpoint, {coap_endpoint, start_link, [InPort, undefined, InExPid, OutExPid]},
+        {coap_endpoint, {coap_endpoint, start_link, [{local, coap_server}, InPort, undefined, InExPid, OutExPid]},
             permanent, 20000, worker, []}).
 
 init([]) ->

@@ -45,17 +45,17 @@ init_non({in, BinMessage}, Data=#state{peer=Peer, handler=undefined}) ->
     % we are acting as a server, use the request to determine the handler
     case coap_server_content:get_handler(Message) of
         undefined ->
-            Ack = coap_message:response(not_found, coap_message:non(Message)),
-            coap_endpoint:start_exchange(Peer, Ack),
+            Ack = coap_message:response(not_found, Message),
+            coap_endpoint:start_exchange(Peer, undefined, Ack),
             {next_state, got_non, Data};
         Handler ->
-            Handler ! {coap_request, {self(), Peer}, Message},
+            Handler ! {coap_request, self(), Peer, Message},
             {next_state, got_non, Data#state{handler=Handler}}
     end;
 init_non({in, BinMessage}, Data=#state{peer=Peer, handler=Handler}) ->
     Message = coap_message_parser:decode(BinMessage),
     io:fwrite("=> ~p~n", [Message]),
-    Handler ! {coap_request, {self(), Peer}, Message},
+    Handler ! {coap_request, self(), Peer, Message},
     {next_state, got_non, Data}.
 
 got_non({in, _Message}, Data) ->
@@ -78,14 +78,14 @@ init_con({in, BinMessage}, Data=#state{peer=Peer, handler=undefined}) ->
             coap_endpoint:send_message(Peer, BinAck),
             {next_state, ack_sent, Data#state{ack=BinAck}};
         Handler ->
-            Handler ! {coap_request, {self(), Peer}, Message},
+            Handler ! {coap_request, self(), Peer, Message},
             AckTimer = gen_fsm:start_timer(?PROCESSING_DELAY, ack),
             {next_state, await_ack, Data#state{handler=Handler, atimer=AckTimer}}
     end;
 init_con({in, BinMessage}, Data=#state{peer=Peer, handler=Handler}) ->
     Message = coap_message_parser:decode(BinMessage),
     io:fwrite("=> ~p~n", [Message]),
-    Handler ! {coap_request, {self(), Peer}, Message},
+    Handler ! {coap_request, self(), Peer, Message},
     AckTimer = gen_fsm:start_timer(?PROCESSING_DELAY, ack),
     {next_state, await_ack, Data#state{atimer=AckTimer}}.
 

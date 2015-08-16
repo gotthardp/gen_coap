@@ -11,25 +11,32 @@
 
 -include("coap.hrl").
 
--export([send_message/2, reply/3, reply/4, reply_content/4]).
+-export([ack/3, reply/4, reply/5, reply_content/5, send_message/2]).
 
-reply(Source, Request, Method) ->
-    reply(Source, Request, Method, <<>>).
+ack(_Pid, Sender, Request=#coap_message{type=non}) ->
+    ok;
 
-reply({_Pid, Sender}, Request=#coap_message{type=non}, Method, Payload) ->
-    Response = coap_message:response(Method, Payload, coap_message:non(Request)),
-    coap_endpoint:start_exchange(Sender, Response);
-
-reply({Pid, _Sender}, Request=#coap_message{type=con}, Method, Payload) ->
-    Response = coap_message:response(Method, Payload, coap_message:ack(Request)),
+ack(Pid, _Sender, Request=#coap_message{type=con}) ->
+    Response = coap_message:response(Request),
     coap_exchange:send_message(Pid, Response).
 
-reply_content({_Pid, Sender}, Request=#coap_message{type=non}, Type, Content) ->
-    Response = coap_message:content(Type, Content, coap_message:non(Request)),
-    coap_endpoint:start_exchange(Sender, Response);
+reply(Pid, Sender, Request, Method) ->
+    reply(Pid, Sender, Request, Method, <<>>).
 
-reply_content({Pid, _Sender}, Request=#coap_message{type=con}, Type, Content) ->
-    Response = coap_message:content(Type, Content, coap_message:ack(Request)),
+reply(_Pid, Sender, Request=#coap_message{type=non}, Method, Payload) ->
+    Response = coap_message:response(Method, Payload, Request),
+    coap_endpoint:start_exchange(Sender, undefined, Response);
+
+reply(Pid, _Sender, Request=#coap_message{type=con}, Method, Payload) ->
+    Response = coap_message:response(Method, Payload, Request),
+    coap_exchange:send_message(Pid, Response).
+
+reply_content(_Pid, Sender, Request=#coap_message{type=non}, Type, Content) ->
+    Response = coap_message:response_with_content(Type, Content, Request),
+    coap_endpoint:start_exchange(Sender, undefined, Response);
+
+reply_content(Pid, _Sender, Request=#coap_message{type=con}, Type, Content) ->
+    Response = coap_message:response_with_content(Type, Content, Request),
     coap_exchange:send_message(Pid, Response).
 
 send_message(Pid, Message) ->
