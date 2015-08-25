@@ -10,14 +10,14 @@
 % functions for request creation and processing
 -module(coap_request).
 
--export([send/2, reply/3, reply_content/4]).
+-export([send/3, reply/3, reply_content/4]).
 -export([handle_request/3, handle_response/3, handle_ack/3, handle_error/3]).
 
 -include("coap.hrl").
 
-send(Channel, Method) ->
+send(Channel, Method, Options) ->
     coap_channel:send_message(Channel,
-        #coap_message{type=con, method=Method}).
+        #coap_message{type=con, method=Method, options=Options}).
 
 reply(Channel, Request, Method) ->
     send_message(Channel,

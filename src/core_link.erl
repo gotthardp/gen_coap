@@ -12,6 +12,8 @@
 
 -export([decode/1, encode/1]).
 
+decode(Binary) when is_binary(Binary) ->
+    decode(binary_to_list(Binary));
 decode(String) ->
     % the parser is auto-generated using leex and yecc
     case catch core_link_scanner:string(String) of

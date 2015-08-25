@@ -11,8 +11,10 @@ Definitions.
 
 ALPHA = [a-zA-Z]
 DIGIT = [0-9]
+HEXDIG = ({DIGIT}|[a-fA-F])
 
-PCHAR = ({ALPHA}|{DIGIT}|[-._~])
+PCT = %{HEXDIG}{HEXDIG}
+PCHAR = ({ALPHA}|{DIGIT}|{PCT}|[-._~])
 
 Rules.
 

@@ -21,19 +21,27 @@ request(Uri) ->
     {ok, Sock} = coap_udp_socket:start_link(),
     {ok, Channel} = coap_udp_socket:connect(Sock, {PeerIP, PortNo}),
 
-    {ok, Ref} = coap_request:send(Channel, get),
-    Res = await_response(Channel, Ref),
+    {ok, Ref} = coap_request:send(Channel, get, []),
+    Res = await_response(Channel, Ref, <<>>),
     % terminate the processes
     coap_channel:close(Channel),
     coap_udp_socket:close(Sock),
     Res.
 
-await_response(Channel, Ref) ->
+await_response(Channel, Ref, Resource) ->
     receive
         {coap_response, Channel, Ref, #coap_message{method={ok, Code}, payload=undefined}} ->
             {ok, Code};
-        {coap_response, Channel, Ref, #coap_message{method={ok, Code}, payload=Data}} ->
-            {ok, Code, Data}
+        {coap_response, Channel, Ref, #coap_message{method={ok, Code}, options=Options, payload=Data}} ->
+    	    case proplists:get_value(block2, Options) of
+    	        [{Num, true, Size}] ->
+    	            % more blocks follow, ask for more
+    	            {ok, Ref2} = coap_request:send(Channel, get, [{block2, [{Num+1, false, Size}]}]),
+    	            await_response(Channel, Ref2, <<Resource/binary, Data/binary>>);
+    	        _Else ->
+    	            % not segmented
+    	            {ok, Code, <<Resource/binary, Data/binary>>}
+    	    end
     end.
 
 % end of file
