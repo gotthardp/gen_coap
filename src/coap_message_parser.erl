@@ -7,27 +7,29 @@
 % Copyright (c) 2015 Petr Gotthard <petr.gotthard@centrum.cz>
 %
 
-% implements CoAP version 1 message encoding and decoding
+% encoding and decoding for CoAP v1 messages
 -module(coap_message_parser).
 
--export([decode/1, decode_type/1, encode/1]).
+-export([decode/1, decode_type/1, encode/1, reset_message/1]).
 -include("coap.hrl").
 
 -define(VERSION, 1).
 
+-define(OPTION_ETAG, 4).
 -define(OPTION_OBSERVE, 6). % draft-ietf-core-observe-16
 -define(OPTION_URI_PATH, 11).
 -define(OPTION_URI_QUERY, 15).
 -define(OPTION_CONTENT_FORMAT, 12).
+-define(OPTION_MAX_AGE, 14).
 -define(OPTION_ACCEPT, 17).
+-define(OPTION_BLOCK2, 23). % draft-ietf-core-block-17
+-define(OPTION_BLOCK1, 27).
 
-% empty message
-decode(<<?VERSION:2, Type:2, 0:4, 0:3, 0:5, MsgId:16, Tail/bytes>>) ->
-    {Options, <<>>} = decode_option_list(Tail),
+% empty message only contains the 4-byte header
+decode(<<?VERSION:2, Type:2, 0:4, 0:3, 0:5, MsgId:16>>) ->
     #coap_message{
         type=decode_type(Type),
-        id=MsgId,
-        options=Options};
+        id=MsgId};
 decode(<<?VERSION:2, Type:2, TKL:4, Class:3, Code:5, MsgId:16, Token:TKL/bytes, Tail/bytes>>) ->
     {Options, Payload} = decode_option_list(Tail),
     #coap_message{
@@ -39,14 +41,17 @@ decode(<<?VERSION:2, Type:2, TKL:4, Class:3, Code:5, MsgId:16, Token:TKL/bytes, 
         payload=Payload}.
 
 % empty message
-encode(#coap_message{type=Type, method=undefined, id=MsgId, options=Options}) ->
-    Tail = encode_option_list(Options, <<>>),
-    <<?VERSION:2, (encode_type(Type)):2, 0:4, 0:3, 0:5, MsgId:16, Tail/bytes>>;
+encode(#coap_message{type=Type, method=undefined, id=MsgId}) ->
+    <<?VERSION:2, (encode_type(Type)):2, 0:4, 0:3, 0:5, MsgId:16>>;
 encode(#coap_message{type=Type, method=Method, id=MsgId, token=Token, options=Options, payload=Payload}) ->
     TKL = byte_size(Token),
     {Class, Code} = encode_enum(methods(), Method),
     Tail = encode_option_list(Options, Payload),
     <<?VERSION:2, (encode_type(Type)):2, TKL:4, Class:3, Code:5, MsgId:16, Token:TKL/bytes, Tail/bytes>>.
+
+% shortcut function for reset generation
+reset_message(<<_:16, MsgId:16, Tail/bytes>>) ->
+    (<<?VERSION:2, 3:2, 0:4, 0:8, MsgId:16>>).
 
 decode_type(0) -> con;
 decode_type(1) -> non;
@@ -58,33 +63,36 @@ encode_type(non) -> 1;
 encode_type(ack) -> 2;
 encode_type(reset) -> 3.
 
-methods() ->
+methods() -> [
 % RFC 7252
-    [{{0,01}, 'get'},
+    % atom indicate a request
+    {{0,01}, get},
     {{0,02}, post},
-    {{0,03}, 'put'},
+    {{0,03}, put},
     {{0,04}, delete},
-    {{2,01}, created},
-    {{2,02}, deleted},
-    {{2,03}, valid},
-    {{2,04}, changed},
-    {{2,05}, content},
-    {{4,00}, bad_request},
-    {{4,01}, uauthorized},
-    {{4,02}, bad_option},
-    {{4,03}, forbidden},
-    {{4,04}, not_found},
-    {{4,05}, method_not_allowed},
-    {{4,06}, not_acceptable},
-    {{4,12}, precondition_failed},
-    {{4,13}, request_entity_too_large},
-    {{4,15}, unsupported_content_format},
-    {{5,00}, internal_server_error},
-    {{5,01}, not_implemented},
-    {{5,02}, bad_gateway},
-    {{5,03}, service_unavailable},
-    {{5,04}, gateway_timeout},
-    {{5,05}, proxying_not_supported}].
+    % success is a tuple {ok, ...}
+    {{2,01}, {ok, created}},
+    {{2,02}, {ok, deleted}},
+    {{2,03}, {ok, valid}},
+    {{2,04}, {ok, changed}},
+    {{2,05}, {ok, content}},
+    % error is a tuple {error, ...}
+    {{4,00}, {error, bad_request}},
+    {{4,01}, {error, uauthorized}},
+    {{4,02}, {error, bad_option}},
+    {{4,03}, {error, forbidden}},
+    {{4,04}, {error, not_found}},
+    {{4,05}, {error, method_not_allowed}},
+    {{4,06}, {error, not_acceptable}},
+    {{4,12}, {error, precondition_failed}},
+    {{4,13}, {error, request_entity_too_large}},
+    {{4,15}, {error, unsupported_content_format}},
+    {{5,00}, {error, internal_server_error}},
+    {{5,01}, {error, not_implemented}},
+    {{5,02}, {error, bad_gateway}},
+    {{5,03}, {error, service_unavailable}},
+    {{5,04}, {error, gateway_timeout}},
+    {{5,05}, {error, proxying_not_supported}}].
 
 content_formats() ->
     [{0, <<"text/plain">>},
@@ -198,51 +206,73 @@ encode_option_list([], _LastNum, Acc) ->
     Acc.
 
 % RFC 7252
-decode_option(?OPTION_URI_PATH, OptVal) ->
-    {uri_path, binary_to_list(OptVal)};
+decode_option(?OPTION_ETAG, OptVal) -> {etag, OptVal};
+decode_option(?OPTION_URI_PATH, OptVal) -> {uri_path, binary_to_list(OptVal)};
 decode_option(?OPTION_CONTENT_FORMAT, OptVal) ->
     Num = binary:decode_unsigned(OptVal),
     {content_format, decode_enum(content_formats(), Num, Num)};
-decode_option(?OPTION_URI_QUERY, OptVal) ->
-    {uri_query, binary_to_list(OptVal)};
-decode_option(?OPTION_ACCEPT, OptVal) ->
-    {'accept', binary:decode_unsigned(OptVal)};
+decode_option(?OPTION_MAX_AGE, OptVal) -> {max_age, binary:decode_unsigned(OptVal)};
+decode_option(?OPTION_URI_QUERY, OptVal) -> {uri_query, binary_to_list(OptVal)};
+decode_option(?OPTION_ACCEPT, OptVal) -> {'accept', binary:decode_unsigned(OptVal)};
 % draft-ietf-core-observe-16
-decode_option(?OPTION_OBSERVE, OptVal) ->
-    {observe, binary:decode_unsigned(OptVal)};
+decode_option(?OPTION_OBSERVE, OptVal) -> {observe, binary:decode_unsigned(OptVal)};
+% draft-ietf-core-block-17
+decode_option(?OPTION_BLOCK2, OptVal) -> {block2, decode_block(OptVal)};
+decode_option(?OPTION_BLOCK1, OptVal) -> {block1, decode_block(OptVal)};
 % unknown option
-decode_option(OptNum, OptVal) ->
-    {OptNum, OptVal}.
+decode_option(OptNum, OptVal) -> {OptNum, OptVal}.
+
+decode_block(<<Num:4, M:1, SizEx:3>>) -> decode_block1(Num, M, SizEx);
+decode_block(<<Num:12, M:1, SizEx:3>>) -> decode_block1(Num, M, SizEx);
+decode_block(<<Num:28, M:1, SizEx:3>>) -> decode_block1(Num, M, SizEx).
+
+decode_block1(Num, M, SizEx) ->
+    {Num, if M == 0 -> false; true -> true end, trunc(math:pow(2, SizEx+4))}.
+
 
 % RFC 7252
-encode_option({uri_path, OptVal}) ->
-    {?OPTION_URI_PATH, list_to_binary(OptVal)};
+encode_option({etag, OptVal}) -> {?OPTION_ETAG, OptVal};
+encode_option({uri_path, OptVal}) -> {?OPTION_URI_PATH, list_to_binary(OptVal)};
 encode_option({content_format, OptVal}) when is_integer(OptVal) ->
     {?OPTION_CONTENT_FORMAT, binary:encode_unsigned(OptVal)};
 encode_option({content_format, OptVal}) ->
     Num = encode_enum(content_formats(), OptVal),
     {?OPTION_CONTENT_FORMAT, binary:encode_unsigned(Num)};
-encode_option({uri_query, OptVal}) ->
-    {?OPTION_URI_QUERY, list_to_binary(OptVal)};
-encode_option({'accept', OptVal}) ->
-    {?OPTION_ACCEPT, binary:encode_unsigned(OptVal)};
+encode_option({max_age, OptVal}) -> {?OPTION_MAX_AGE, binary:encode_unsigned(OptVal)};
+encode_option({uri_query, OptVal}) -> {?OPTION_URI_QUERY, list_to_binary(OptVal)};
+encode_option({'accept', OptVal}) -> {?OPTION_ACCEPT, binary:encode_unsigned(OptVal)};
 % draft-ietf-core-observe-16
-encode_option({observe, OptVal}) ->
-    {?OPTION_OBSERVE, binary:encode_unsigned(OptVal)};
+encode_option({observe, OptVal}) -> {?OPTION_OBSERVE, binary:encode_unsigned(OptVal)};
+% draft-ietf-core-block-17
+encode_option({block2, OptVal}) -> {?OPTION_BLOCK2, encode_block(OptVal)};
+encode_option({block1, OptVal}) -> {?OPTION_BLOCK1, encode_block(OptVal)};
 % unknown option
 encode_option({OptNum, OptVal}) when is_integer(OptNum) ->
     {OptNum, OptVal}.
 
+encode_block({Num, More, Size}) ->
+    encode_block1(Num, if More -> 1; true -> 0 end, trunc(log2(Size))-4).
+
+encode_block1(Num, M, SizEx) when Num < 16 ->
+    <<Num:4, M:1, SizEx:3>>;
+encode_block1(Num, M, SizEx) when Num < 4096 ->
+    <<Num:12, M:1, SizEx:3>>;
+encode_block1(Num, M, SizEx) ->
+    <<Num:28, M:1, SizEx:3>>.
+
+% log2 is not available in R16B
+log2(X) -> math:log(X) / math:log(2).
 
 -include_lib("eunit/include/eunit.hrl").
 
+% note that the options below must be sorted by the option numbers
 codec_test_()-> [
     test_codec(#coap_message{type=reset, id=0, options=[]}),
-    test_codec(#coap_message{type=con, method='get', id=100,
-        options=[{observe, [1]}]}),
-    test_codec(#coap_message{type=non, method='put', id=200, token= <<"token">>,
+    test_codec(#coap_message{type=con, method=get, id=100,
+        options=[{block1, [{0,true,128}]}, {observe, [1]}]}),
+    test_codec(#coap_message{type=non, method=put, id=200, token= <<"token">>,
         options=[{uri_path,[".well-known", "core"]}]}),
-    test_codec(#coap_message{type=non, method='content', id=200, token= <<"token">>,
+    test_codec(#coap_message{type=non, method={ok, 'content'}, id=200, token= <<"token">>,
         payload= <<"<url>">>, options=[{content_format, [<<"application/link-format">>]}, {uri_path,[".well-known", "core"]}]})].
 
 test_codec(Message) ->

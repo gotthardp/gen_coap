@@ -7,8 +7,8 @@
 % Copyright (c) 2015 Petr Gotthard <petr.gotthard@centrum.cz>
 %
 
-% implements registration of server content handlers
-% implements the .well-known/code resource and (in future) content queries
+% registry of server content handlers
+% provides the .well-known/code resource and (in future) content queries
 -module(coap_server_content).
 -behaviour(gen_server).
 
@@ -58,14 +58,14 @@ handle_call({get_handler, UriPath}, _From, State=#state{reg=Reg}) ->
     end.
 
 handle_cast(Request, State) ->
-    io:fwrite("unknown cast ~p~n", [Request]),
+    io:fwrite("coap_server_content unknown cast ~p~n", [Request]),
     {noreply, State}.
 
-handle_info({coap_request, Pid, Peer, Request=#coap_message{method='get'}}, State=#state{reg=Reg}) ->
-    coap_exchange:reply_content(Pid, Peer, Request, <<"application/link-format">>, format_links(Reg)),
+handle_info({coap_request, Channel, _Ref, Request=#coap_message{method='get'}}, State=#state{reg=Reg}) ->
+    coap_request:reply_content(Channel, Request, <<"application/link-format">>, format_links(Reg)),
     {noreply, State};
-handle_info({coap_request, Pid, Peer, Request}, State) ->
-    coap_exchange:reply(Pid, Peer, Request, method_not_allowed),
+handle_info({coap_request, Channel, _Ref, Request}, State) ->
+    coap_request:reply(Channel, Request, {error, method_not_allowed}),
     {noreply, State};
 handle_info(_Unknown, State) ->
     {noreply, State}.

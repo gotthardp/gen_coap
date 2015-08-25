@@ -9,16 +9,25 @@
 
 % convenience functions for message construction
 -module(coap_message).
--export([response/1, response/2, response/3, response_with_content/3, non_with_content/3, con_with_content/3]).
+-export([content/2, content/3, response/1, response/2, response/3]).
 
 -include("coap.hrl").
+
+content(Type, Payload) ->
+    content(Type, Payload, #coap_message{}).
+
+content(Type, Payload, Msg) ->
+    Msg#coap_message{
+        method={ok, content},
+        options=[{content_format, [Type]}],
+        payload=Payload
+    }.
 
 response(Request=#coap_message{type=non}) ->
     #coap_message{
         type=non,
         token=Request#coap_message.token
     };
-
 response(Request=#coap_message{type=con}) ->
     #coap_message{
         type=ack,
@@ -28,7 +37,7 @@ response(Request=#coap_message{type=con}) ->
 
 response(Method, Request) ->
     Res = response(Request),
-    #coap_message{
+    Res#coap_message{
         method=Method
     }.
 
@@ -36,32 +45,6 @@ response(Method, Payload, Request) ->
     Res = response(Request),
     Res#coap_message{
         method=Method,
-        payload=Payload
-    }.
-
-response_with_content(Type, Payload, Request) ->
-    Res = response(Request),
-    Res#coap_message{
-        method=content,
-        options=[{content_format, [Type]}],
-        payload=Payload
-    }.
-
-non_with_content(Type, Payload, Token) ->
-    #coap_message{
-        type=non,
-        method=content,
-        token=Token,
-        options=[{content_format, [Type]}],
-        payload=Payload
-    }.
-
-con_with_content(Type, Payload, Token) ->
-    #coap_message{
-        type=con,
-        method=content,
-        token=Token,
-        options=[{content_format, [Type]}],
         payload=Payload
     }.
 

@@ -7,7 +7,7 @@
 % Copyright (c) 2015 Petr Gotthard <petr.gotthard@centrum.cz>
 %
 
-% implements the CoRE link format, see RFC 6690
+% encoding and decoding for the CoRE link format, see RFC 6690
 -module(core_link).
 
 -export([decode/1, encode/1]).

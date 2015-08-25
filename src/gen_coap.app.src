@@ -3,7 +3,7 @@
 	{vsn, "0.0.1"},
 	{modules, []},
 	{registered, []},
-	{mod, {gen_coap, []}},
+	{mod, {coap_server, []}},
 	{env, []},
 	{applications, [kernel, stdlib]}]}.
 
