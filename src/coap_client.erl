@@ -10,18 +10,18 @@
 % convenience functions for building CoAP clients
 -module(coap_client).
 
--export([request/1]).
+-export([request/2]).
 
 -include("coap.hrl").
 
-request(Uri) ->
+request(Method, Uri) ->
     {ok, {_Scheme, _UserInfo, Host, PortNo, _Path, _Query}} = http_uri:parse(Uri),
     {ok, PeerIP} = inet:getaddr(Host, inet),
 
     {ok, Sock} = coap_udp_socket:start_link(),
     {ok, Channel} = coap_udp_socket:connect(Sock, {PeerIP, PortNo}),
 
-    {ok, Ref} = coap_request:send(Channel, get, []),
+    {ok, Ref} = coap_request:send(Channel, Method, []),
     Res = await_response(Channel, Ref, <<>>),
     % terminate the processes
     coap_channel:close(Channel),

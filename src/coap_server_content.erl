@@ -33,7 +33,8 @@ get_handler(Message) ->
 init(_Args) ->
     {ok, #state{reg=
         % RFC 6690, Section 4
-        [{?MODULE, {absolute, [".well-known", "core"], []}, true}]
+        % the .well-known/core itself is not listed under .well-known/core
+        [{?MODULE, {absolute, [".well-known", "core"], []}, false}]
     }}.
 
 handle_call({add_handler, Process, Link, Public}, _From, State=#state{reg=Reg}) ->
@@ -79,7 +80,7 @@ terminate(_Reason, _State) ->
 format_links(Reg) ->
     LinkList = lists:filtermap(
         fun({_, Link, true}) -> {true, Link};
-            ({_, _, _, false}) -> false
+            ({_, _, false}) -> false
         end, Reg),
     list_to_binary(core_link:encode(LinkList)).
 
