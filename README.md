@@ -20,11 +20,10 @@ if you find a bug or miss a feature.
 
 ### Client
 
-Get the resource by:
-
-    ```erlang
-    {ok, content, Data} = coap_client:request(get, "coap://coap.me:5683")
-    ```
+Get a resource by:
+```erlang
+{ok, content, Data} = coap_client:request(get, "coap://coap.me:5683")
+```
 
 ### Server
 
@@ -35,6 +34,6 @@ Build and start the server:
     $ erl -pa ebin
     1> coap_server:start().
 
-Invoke the client and access the server resources:
+Then, invoke the client and access the server resources:
 
     $ ./coap-client coap://127.0.0.1/.well-known/core
