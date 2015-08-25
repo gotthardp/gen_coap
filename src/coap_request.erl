@@ -42,10 +42,10 @@ handle_response({Handler, Ref}, Channel, Message=#coap_message{}) ->
     Handler ! {coap_response, Channel, Ref, Message}.
 
 handle_ack({Handler, Ref}, Channel, _Message) ->
-    ok.
-%TODO
-handle_error({Handler, Ref}, Channel, Error) ->
-    ok.
+    Handler ! {coap_ack, Channel, Ref}.
+
+handle_error({Handler, Ref}, Channel, {MsgId, Error}) ->
+    Handler ! {coap_error, Channel, Ref, Error}.
 
 
 send_message(Channel, Message) ->

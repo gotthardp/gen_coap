@@ -12,7 +12,7 @@
 -module(coap_channel).
 -behaviour(gen_server).
 
--export([start_link/2]).
+-export([start_link/2, close/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
 -export([send_request/2, send_message/2, send_ack/2]).
 
@@ -25,6 +25,9 @@
 
 start_link(SockPid, ChId) ->
     gen_server:start_link(?MODULE, [SockPid, ChId], []).
+
+close(Pid) ->
+    gen_server:cast(Pid, shutdown).
 
 send_request(Pid, Message) ->
     Ref = make_ref(),
@@ -55,6 +58,8 @@ handle_cast({send_message, Message, Receiver}, State) ->
 % outgoing ACK(2) or RST(3)
 handle_cast({send_ack, Message=#coap_message{id=MsgId}}, State) ->
     transport_ack({in, MsgId}, Message, State);
+handle_cast(shutdown, State) ->
+    {stop, normal, State};
 handle_cast(Request, State) ->
     io:fwrite("coap_channel unknown cast ~p~n", [Request]),
     {noreply, State}.
@@ -120,6 +125,9 @@ handle_info({timeout, TrId, Event}, State=#state{trans=Trans}) ->
             error -> undefined; % ignore unexpected responses
             {ok, TrState} -> coap_transport:timeout(Event, TrState)
         end);
+handle_info({request_complete, Token}, State=#state{tokens=Tokens}) ->
+    Tokens2 = dict:erase(Token, Tokens),
+    purge_state(State#state{tokens=Tokens2});
 handle_info(Info, State) ->
     io:fwrite("unexpected massage ~p~n", [Info]),
     {noreply, State}.
@@ -157,12 +165,15 @@ init_transport(TrId, Receiver, #state{sock=Sock, cid=ChId}) ->
 
 update_state(State=#state{trans=Trans}, TrId, undefined) ->
     Trans2 = dict:erase(TrId, Trans),
-    case dict:size(Trans2) of
-        N when N == 0 -> {stop, normal, State#state{trans=Trans2}};
-        _Else -> {noreply, State#state{trans=Trans2}}
-    end;
+    purge_state(State#state{trans=Trans2});
 update_state(State=#state{trans=Trans}, TrId, TrState) ->
     Trans2 = dict:store(TrId, TrState, Trans),
     {noreply, State#state{trans=Trans2}}.
+
+purge_state(State=#state{tokens=Tokens, trans=Trans}) ->
+    case dict:size(Tokens)+dict:size(Trans) of
+        N when N == 0 -> {stop, normal, State};
+        _Else -> {noreply, State}
+    end.
 
 % end of file

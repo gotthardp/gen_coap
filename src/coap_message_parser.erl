@@ -50,7 +50,7 @@ encode(#coap_message{type=Type, method=Method, id=MsgId, token=Token, options=Op
     <<?VERSION:2, (encode_type(Type)):2, TKL:4, Class:3, Code:5, MsgId:16, Token:TKL/bytes, Tail/bytes>>.
 
 % shortcut function for reset generation
-reset_message(<<_:16, MsgId:16, Tail/bytes>>) ->
+reset_message(<<_:16, MsgId:16, _Tail/bytes>>) ->
     (<<?VERSION:2, 3:2, 0:4, 0:8, MsgId:16>>).
 
 decode_type(0) -> con;

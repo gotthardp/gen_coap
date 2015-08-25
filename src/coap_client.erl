@@ -23,8 +23,9 @@ request(Uri) ->
 
     {ok, Ref} = coap_request:send(Channel, get),
     Res = await_response(Channel, Ref),
-    %% FIXME: terminate the processes
-    %% FIXME: when the client tokens are removed from the channel?
+    % terminate the processes
+    coap_channel:close(Channel),
+    coap_udp_socket:close(Sock),
     Res.
 
 await_response(Channel, Ref) ->

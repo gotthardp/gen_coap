@@ -13,7 +13,7 @@
 -module(coap_udp_socket).
 -behaviour(gen_server).
 
--export([start_link/0, start_link/2, connect/2]).
+-export([start_link/0, start_link/2, connect/2, close/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
 
 -record(state, {sock, chans, pool}).
@@ -27,6 +27,12 @@ start_link(InPort, SupPid) ->
 
 connect(Pid, {PeerIP, PeerPortNo}) ->
     gen_server:call(Pid, {connect, {PeerIP, PeerPortNo}}).
+
+close(Pid) ->
+    % the channels will be terminated by their supervisor (server), or
+    % should be terminated by the user (client)
+    gen_server:cast(Pid, shutdown).
+
 
 init([InPort]) ->
     {ok, Socket} = gen_udp:open(InPort, [binary, {active, true}]),
@@ -60,6 +66,8 @@ handle_cast({set_pool, SupPid}, State) ->
     % calling coap_server directly from init/1 causes deadlock
     PoolPid = coap_server:channel_sup(SupPid),
     {noreply, State#state{pool=PoolPid}};
+handle_cast(shutdown, State) ->
+    {stop, normal, State};
 handle_cast(Request, State) ->
     io:fwrite("coap_udp_socket unknown cast ~p~n", [Request]),
     {noreply, State}.
@@ -94,14 +102,14 @@ handle_info({terminated, ChId}, State=#state{chans=Chans}) ->
     Chans2 = dict:erase(ChId, Chans),
     {noreply, State#state{chans=Chans2}};
 handle_info(Info, State) ->
-    io:fwrite("coap_udp_socket unexpected massage ~p~n", [Info]),
+    io:fwrite("coap_udp_socket unexpected ~p~n", [Info]),
     {noreply, State}.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-terminate(Reason, _State) ->
-    io:fwrite("endpoint terminated ~p~n", [Reason]),
+terminate(_Reason, #state{sock=Sock}) ->
+    gen_udp:close(Sock),
     ok.
 
 
