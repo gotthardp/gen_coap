@@ -33,16 +33,14 @@ get_handler(Message) ->
 init(_Args) ->
     {ok, #state{reg=
         % RFC 6690, Section 4
-        % the .well-known/core itself is not listed under .well-known/core
-        [{?MODULE, {absolute, [".well-known", "core"], []}, false}]
+        [{?MODULE, {absolute, [".well-known", "core"], []}}]
     }}.
 
 handle_call({add_handler, Process, Link, Public}, _From, State=#state{reg=Reg}) ->
     {reply, ok, State#state{reg=[{Process, Link, Public} | Reg]}};
-
 handle_call({get_handler, UriPath}, _From, State=#state{reg=Reg}) ->
     case lists:foldl(
-        fun(Entry={_Process, {_, RegisteredUri, _}, _Public}, Acc) ->
+        fun(Entry={_Handler, {_, RegisteredUri, _}}, Acc) ->
             case {lists:sublist(UriPath, length(RegisteredUri)), Acc} of
                 {RegisteredUri, undefined} -> Entry;
                 {RegisteredUri, {BestUri, _}} ->
@@ -54,7 +52,7 @@ handle_call({get_handler, UriPath}, _From, State=#state{reg=Reg}) ->
             end
         end, undefined, Reg)
     of
-        {Res, _, _} -> {reply, Res, State};
+        {Handler, _} -> {reply, Handler, State};
         undefined -> {reply, undefined, State}
     end.
 
@@ -63,7 +61,17 @@ handle_cast(Request, State) ->
     {noreply, State}.
 
 handle_info({coap_request, Channel, _Ref, Request=#coap_message{method='get'}}, State=#state{reg=Reg}) ->
-    coap_request:reply_content(Channel, Request, <<"application/link-format">>, format_links(Reg)),
+    % ask each handler to provide a link list
+    Links = lists:foldl(
+                fun
+                    % the .well-known/core itself is not listed under .well-known/core
+                    ({?MODULE, _Uri}, Acc) ->
+                        Acc;
+                    ({Handler, Uri}, Acc) ->
+                        Acc++gen_server:call(Handler, {get_links, Uri})
+                end, [], Reg),
+    coap_request:reply_content(Channel, Request, <<"application/link-format">>,
+        list_to_binary(core_link:encode(Links))),
     {noreply, State};
 handle_info({coap_request, Channel, _Ref, Request}, State) ->
     coap_request:reply(Channel, Request, {error, method_not_allowed}),
@@ -76,12 +84,5 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate(_Reason, _State) ->
     ok.
-
-format_links(Reg) ->
-    LinkList = lists:filtermap(
-        fun({_, Link, true}) -> {true, Link};
-            ({_, _, false}) -> false
-        end, Reg),
-    list_to_binary(core_link:encode(LinkList)).
 
 % end of file
