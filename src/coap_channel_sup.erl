@@ -12,7 +12,7 @@
 -module(coap_channel_sup).
 -behaviour(supervisor).
 
--export([start_link/0, start_channel/2, init/1]).
+-export([start_link/0, start_channel/2, delete_channel/2, init/1]).
 
 start_link() ->
     supervisor:start_link(?MODULE, []).
@@ -22,6 +22,9 @@ start_channel(SupPid, ChId) ->
         {ChId,
             {coap_channel, start_link, [self(), ChId]},
             transient, 5000, worker, []}).
+
+delete_channel(SupPid, ChId) ->
+    supervisor:delete_child(SupPid, ChId).
 
 init([]) ->
     {ok, {{one_for_one, 3, 10}, []}}.

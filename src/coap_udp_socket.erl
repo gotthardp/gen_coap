@@ -98,8 +98,9 @@ handle_info({udp, _Socket, PeerIP, PeerPortNo, Data}, State=#state{chans=Chans, 
 handle_info({datagram, {PeerIP, PeerPortNo}, Data}, State=#state{sock=Socket}) ->
     gen_udp:send(Socket, PeerIP, PeerPortNo, Data),
     {noreply, State};
-handle_info({terminated, ChId}, State=#state{chans=Chans}) ->
+handle_info({terminated, ChId}, State=#state{chans=Chans, pool=PoolPid}) ->
     Chans2 = dict:erase(ChId, Chans),
+    coap_channel_sup:delete_channel(PoolPid, ChId),
     {noreply, State#state{chans=Chans2}};
 handle_info(Info, State) ->
     io:fwrite("coap_udp_socket unexpected ~p~n", [Info]),
