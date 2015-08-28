@@ -13,13 +13,13 @@
 
 -include("coap.hrl").
 
-content(Type, Payload) ->
-    content(Type, Payload, #coap_message{}).
+content(Format, Payload) ->
+    content(Format, Payload, #coap_message{}).
 
-content(Type, Payload, Msg) ->
+content(Format, Payload, Msg) ->
     Msg#coap_message{
         method={ok, content},
-        options=[{content_format, [Type]}],
+        options=[{content_format, [Format]}],
         payload=Payload
     }.
 
@@ -35,13 +35,13 @@ response(Request=#coap_message{type=con}) ->
         token=Request#coap_message.token
     }.
 
-response(Method, Request) ->
+response(Request, Method) ->
     Res = response(Request),
     Res#coap_message{
         method=Method
     }.
 
-response(Method, Payload, Request) ->
+response(Request, Method, Payload) ->
     Res = response(Request),
     Res#coap_message{
         method=Method,

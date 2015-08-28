@@ -14,7 +14,7 @@
 
 -export([start_link/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
--export([add_handler/3, get_handler/1]).
+-export([add_handler/2, get_handler/1]).
 
 -include("coap.hrl").
 
@@ -23,8 +23,8 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-add_handler(Process, Link, Public) ->
-    gen_server:call(?MODULE, {add_handler, Process, Link, Public}).
+add_handler(Process, Link) ->
+    gen_server:call(?MODULE, {add_handler, Process, Link}).
 
 get_handler(Message) ->
     UriPath = proplists:get_value(uri_path, Message#coap_message.options, []),
@@ -36,8 +36,8 @@ init(_Args) ->
         [{?MODULE, {absolute, [".well-known", "core"], []}}]
     }}.
 
-handle_call({add_handler, Process, Link, Public}, _From, State=#state{reg=Reg}) ->
-    {reply, ok, State#state{reg=[{Process, Link, Public} | Reg]}};
+handle_call({add_handler, Process, Link}, _From, State=#state{reg=Reg}) ->
+    {reply, ok, State#state{reg=[{Process, Link} | Reg]}};
 handle_call({get_handler, UriPath}, _From, State=#state{reg=Reg}) ->
     case lists:foldl(
         fun(Entry={_Handler, {_, RegisteredUri, _}}, Acc) ->
@@ -60,7 +60,7 @@ handle_cast(Request, State) ->
     io:fwrite("coap_server_content unknown cast ~p~n", [Request]),
     {noreply, State}.
 
-handle_info({coap_request, Channel, _Ref, Request=#coap_message{method='get'}}, State=#state{reg=Reg}) ->
+handle_info({coap_request, _ChId, Channel, _Ref, Request=#coap_message{method='get'}}, State=#state{reg=Reg}) ->
     % ask each handler to provide a link list
     Links = lists:foldl(
                 fun
@@ -73,7 +73,7 @@ handle_info({coap_request, Channel, _Ref, Request=#coap_message{method='get'}}, 
     coap_request:reply_content(Channel, Request, <<"application/link-format">>,
         list_to_binary(core_link:encode(Links))),
     {noreply, State};
-handle_info({coap_request, Channel, _Ref, Request}, State) ->
+handle_info({coap_request, _ChId, Channel, _Ref, Request}, State) ->
     coap_request:reply(Channel, Request, {error, method_not_allowed}),
     {noreply, State};
 handle_info(_Unknown, State) ->

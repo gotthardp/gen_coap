@@ -14,7 +14,7 @@
 
 -export([start_link/2, close/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
--export([send_request/2, send_message/2, send_ack/2]).
+-export([send_request/2, send_request/3, send_message/2, send_message/3, send_ack/2]).
 
 -define(VERSION, 1).
 -define(MAX_MESSAGE_ID, 65535). % 16-bit number
@@ -30,11 +30,13 @@ close(Pid) ->
     gen_server:cast(Pid, shutdown).
 
 send_request(Pid, Message) ->
-    Ref = make_ref(),
+    send_request(Pid, Message, make_ref()).
+send_request(Pid, Message, Ref) ->
     gen_server:cast(Pid, {send_request, Message, {self(), Ref}}),
     {ok, Ref}.
 send_message(Pid, Message) ->
-    Ref = make_ref(),
+    send_message(Pid, Message, make_ref()).
+send_message(Pid, Message, Ref) ->
     gen_server:cast(Pid, {send_message, Message, {self(), Ref}}),
     {ok, Ref}.
 send_ack(Pid, Message) ->

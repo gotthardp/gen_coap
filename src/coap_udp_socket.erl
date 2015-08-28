@@ -13,7 +13,7 @@
 -module(coap_udp_socket).
 -behaviour(gen_server).
 
--export([start_link/0, start_link/2, connect/2, close/1]).
+-export([start_link/0, start_link/2, start_link/3, get_channel/2, close/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
 
 -record(state, {sock, chans, pool}).
@@ -24,9 +24,11 @@ start_link() ->
 % server
 start_link(InPort, SupPid) ->
     gen_server:start_link(?MODULE, [InPort, SupPid], []).
+start_link(ServerName, InPort, SupPid) ->
+    gen_server:start_link(ServerName, ?MODULE, [InPort, SupPid], []).
 
-connect(Pid, {PeerIP, PeerPortNo}) ->
-    gen_server:call(Pid, {connect, {PeerIP, PeerPortNo}}).
+get_channel(Pid, {PeerIP, PeerPortNo}) ->
+    gen_server:call(Pid, {get_channel, {PeerIP, PeerPortNo}}).
 
 close(Pid) ->
     % the channels will be terminated by their supervisor (server), or
@@ -44,15 +46,15 @@ init([InPort, SupPid]) ->
     gen_server:cast(self(), {set_pool, SupPid}),
     init([InPort]).
 
-handle_call({connect, ChId}, _From, State=#state{chans=Chans, pool=undefined}) ->
-    case get_channel(ChId, Chans) of
+handle_call({get_channel, ChId}, _From, State=#state{chans=Chans, pool=undefined}) ->
+    case find_channel(ChId, Chans) of
         {ok, Pid} ->
             {reply, {ok, Pid}, State};
         undefined ->
             {ok, Pid} = coap_channel:start_link(self(), ChId),
             {reply, {ok, Pid}, store_channel(ChId, Pid, State)}
     end;
-handle_call({connect, ChId}, _From, State=#state{pool=PoolPid}) ->
+handle_call({get_channel, ChId}, _From, State=#state{pool=PoolPid}) ->
     case start_channel(PoolPid, ChId) of
         {ok, Pid} ->
             {reply, {ok, Pid}, store_channel(ChId, Pid, State)};
@@ -74,7 +76,7 @@ handle_cast(Request, State) ->
 
 handle_info({udp, _Socket, PeerIP, PeerPortNo, Data}, State=#state{chans=Chans, pool=PoolPid}) ->
     ChId = {PeerIP, PeerPortNo},
-    case get_channel(ChId, Chans) of
+    case find_channel(ChId, Chans) of
         % channel found in cache
         {ok, Pid} ->
             Pid ! {datagram, Data},
@@ -114,7 +116,7 @@ terminate(_Reason, #state{sock=Sock}) ->
     ok.
 
 
-get_channel(ChId, Chans) ->
+find_channel(ChId, Chans) ->
     case dict:find(ChId, Chans) of
         % there is a channel in our cache, but it might have crashed
         {ok, Pid} ->

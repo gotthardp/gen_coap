@@ -60,14 +60,14 @@ idle(Msg={out, #coap_message{type=con}}, State=#state{channel=Channel, tid=TrId}
 
 % --- incoming NON
 
-in_non({in, BinMessage}, State=#state{channel=Channel, receiver=Receiver}) ->
+in_non({in, BinMessage}, State=#state{cid=ChId, channel=Channel, receiver=Receiver}) ->
     Message = coap_message_parser:decode(BinMessage),
     io:fwrite("=> ~p~n", [Message]),
     case Message of
         #coap_message{method=Method} when is_atom(Method) ->
-            coap_request:handle_request(Receiver, Channel, Message);
+            coap_request:handle_request(Receiver, ChId, Channel, Message);
         #coap_message{} ->
-            coap_request:handle_response(Receiver, Channel, Message),
+            coap_request:handle_response(Receiver, ChId, Channel, Message),
             request_complete(Channel, Message)
     end,
     next_state(got_non, State).
@@ -85,12 +85,12 @@ out_non({out, Message}, State=#state{sock=Sock, cid=ChId}) ->
     next_state(sent_non, State).
 
 % we may get reset
-sent_non({in, BinMessage}, State=#state{channel=Channel, receiver=Receiver})->
+sent_non({in, BinMessage}, State=#state{cid=ChId, channel=Channel, receiver=Receiver})->
     Message = coap_message_parser:decode(BinMessage),
     io:fwrite("-> ~p~n", [Message]),
     case Message of
         #coap_message{type=reset, id=MsgId} ->
-            coap_request:handle_error(Receiver, Channel, {MsgId, reset})
+            coap_request:handle_error(Receiver, ChId, Channel, {MsgId, reset})
     end,
     next_state(got_rst, State).
 
@@ -99,14 +99,14 @@ got_rst({in, _BinMessage}, State)->
 
 % --- incoming CON->ACK|RST
 
-in_con({in, BinMessage}, State=#state{channel=Channel, receiver=Receiver}) ->
+in_con({in, BinMessage}, State=#state{cid=ChId, channel=Channel, receiver=Receiver}) ->
     Message = coap_message_parser:decode(BinMessage),
     io:fwrite("=> ~p~n", [Message]),
     case Message of
         #coap_message{method=Method} when is_atom(Method) ->
-            coap_request:handle_request(Receiver, Channel, Message);
+            coap_request:handle_request(Receiver, ChId, Channel, Message);
         #coap_message{} ->
-            coap_request:handle_response(Receiver, Channel, Message),
+            coap_request:handle_response(Receiver, ChId, Channel, Message),
             request_complete(Channel, Message)
     end,
     % we may need to ack the message
@@ -142,14 +142,14 @@ out_con({out, Message}, State=#state{sock=Sock, cid=ChId}) ->
     next_state(await_pack, State#state{msg=Message, retry_time=Timeout, retry_count=0}, Timeout).
 
 % peer ack
-await_pack({in, BinAck}, State=#state{channel=Channel, receiver=Receiver}) ->
+await_pack({in, BinAck}, State=#state{cid=ChId, channel=Channel, receiver=Receiver}) ->
     Ack = coap_message_parser:decode(BinAck),
     io:fwrite("-> ~p~n", [Ack]),
     case Ack of
         #coap_message{method=undefined} ->
-            coap_request:handle_ack(Receiver, Channel, Ack);
+            coap_request:handle_ack(Receiver, ChId, Channel, Ack);
         #coap_message{} ->
-            coap_request:handle_response(Receiver, Channel, Ack),
+            coap_request:handle_response(Receiver, ChId, Channel, Ack),
             request_complete(Channel, Ack)
     end,
     next_state(aack_sent, State);
@@ -158,9 +158,9 @@ await_pack({timeout, await_pack}, State=#state{sock=Sock, cid=ChId, msg=Message,
     Sock ! {datagram, ChId, BinMessage},
     Timeout2 = Timeout*2,
     next_state(await_pack, State#state{retry_time=Timeout2, retry_count=Count+1}, Timeout2);
-await_pack({timeout, await_pack}, State=#state{channel=Channel, tid={out, MsgId}, receiver=Receiver}) ->
+await_pack({timeout, await_pack}, State=#state{cid=ChId, channel=Channel, tid={out, MsgId}, receiver=Receiver}) ->
     io:fwrite("-> timeout ~p~n", [MsgId]),
-    coap_request:handle_error(Receiver, Channel, {MsgId, timeout}),
+    coap_request:handle_error(Receiver, ChId, Channel, {MsgId, timeout}),
     next_state(aack_sent, State).
 
 aack_sent({in, _Ack}, State) ->

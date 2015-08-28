@@ -19,7 +19,7 @@ request(Method, Uri) ->
     {ok, PeerIP} = inet:getaddr(Host, inet),
 
     {ok, Sock} = coap_udp_socket:start_link(),
-    {ok, Channel} = coap_udp_socket:connect(Sock, {PeerIP, PortNo}),
+    {ok, Channel} = coap_udp_socket:get_channel(Sock, {PeerIP, PortNo}),
 
     {ok, Ref} = coap_request:send(Channel, Method, []),
     Res = await_response(Channel, Ref, <<>>),
@@ -33,15 +33,15 @@ await_response(Channel, Ref, Resource) ->
         {coap_response, Channel, Ref, #coap_message{method={ok, Code}, payload=undefined}} ->
             {ok, Code};
         {coap_response, Channel, Ref, #coap_message{method={ok, Code}, options=Options, payload=Data}} ->
-    	    case proplists:get_value(block2, Options) of
-    	        [{Num, true, Size}] ->
-    	            % more blocks follow, ask for more
-    	            {ok, Ref2} = coap_request:send(Channel, get, [{block2, [{Num+1, false, Size}]}]),
-    	            await_response(Channel, Ref2, <<Resource/binary, Data/binary>>);
-    	        _Else ->
-    	            % not segmented
-    	            {ok, Code, <<Resource/binary, Data/binary>>}
-    	    end
+            case proplists:get_value(block2, Options) of
+                [{Num, true, Size}] ->
+                    % more blocks follow, ask for more
+                    {ok, Ref2} = coap_request:send(Channel, get, [{block2, [{Num+1, false, Size}]}]),
+                    await_response(Channel, Ref2, <<Resource/binary, Data/binary>>);
+                _Else ->
+                    % not segmented
+                    {ok, Code, <<Resource/binary, Data/binary>>}
+            end
     end.
 
 % end of file

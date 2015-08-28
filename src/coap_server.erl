@@ -39,7 +39,8 @@ init([InPort]) ->
             {coap_channel_sup, start_link, []},
             permanent, infinity, supervisor, []},
         {coap_udp_socket,
-            {coap_udp_socket, start_link, [InPort, self()]},
+            % for convenience register the main worker under the application name
+            {coap_udp_socket, start_link, [{local, ?MODULE}, InPort, self()]},
             permanent, 5000, worker, []}
     ]}}.
 
