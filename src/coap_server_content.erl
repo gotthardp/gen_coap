@@ -38,40 +38,17 @@ init(_Args) ->
 
 handle_call({add_handler, Process, Link}, _From, State=#state{reg=Reg}) ->
     {reply, ok, State#state{reg=[{Process, Link} | Reg]}};
-handle_call({get_handler, UriPath}, _From, State=#state{reg=Reg}) ->
-    case lists:foldl(
-        fun(Entry={_Handler, {_, RegisteredUri, _}}, Acc) ->
-            case {lists:sublist(UriPath, length(RegisteredUri)), Acc} of
-                {RegisteredUri, undefined} -> Entry;
-                {RegisteredUri, {BestUri, _}} ->
-                    if
-                        length(RegisteredUri) > length(BestUri) -> Entry;
-                        true -> Acc
-                    end;
-                _AnythingElse -> Acc
-            end
-        end, undefined, Reg)
-    of
-        {Handler, _} -> {reply, Handler, State};
-        undefined -> {reply, undefined, State}
-    end.
+handle_call({get_handler, Uri}, _From, State=#state{reg=Reg}) ->
+    {reply, lookup_uri(Reg, Uri), State}.
 
 handle_cast(Request, State) ->
     io:fwrite("coap_server_content unknown cast ~p~n", [Request]),
     {noreply, State}.
 
 handle_info({coap_request, _ChId, Channel, _Ref, Request=#coap_message{method='get'}}, State=#state{reg=Reg}) ->
-    % ask each handler to provide a link list
-    Links = lists:foldl(
-                fun
-                    % the .well-known/core itself is not listed under .well-known/core
-                    ({?MODULE, _Uri}, Acc) ->
-                        Acc;
-                    ({Handler, Uri}, Acc) ->
-                        Acc++gen_server:call(Handler, {get_links, Uri})
-                end, [], Reg),
-    coap_request:reply_content(Channel, Request, <<"application/link-format">>,
-        list_to_binary(core_link:encode(Links))),
+    coap_request:reply_content(Channel, Request,
+        <<"application/link-format">>,
+        list_to_binary(core_link:encode(get_links(Reg)))),
     {noreply, State};
 handle_info({coap_request, _ChId, Channel, _Ref, Request}, State) ->
     coap_request:reply(Channel, Request, {error, method_not_allowed}),
@@ -84,5 +61,55 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate(_Reason, _State) ->
     ok.
+
+% ask each handler to provide a link list
+get_links(Reg) ->
+    lists:foldl(
+        fun
+            % the .well-known/core itself is not listed under .well-known/core
+            ({?MODULE, _Uri}, Acc) ->
+                Acc;
+            ({Handler, Uri}, Acc) ->
+                Acc++gen_server:call(Handler, {get_links, Uri})
+        end, [], Reg).
+
+lookup_uri(Reg, Uri) ->
+    lists:foldl(
+        fun ({Handler, Pattern}, none) ->
+                case match_uri(Pattern, Uri) of
+                    {ok, Match} -> {Handler, Match};
+                    none -> none
+                end;
+            (_Any, Result) ->
+                Result
+        end, none, Reg).
+
+match_uri({absolute, Pattern, _}, Uri) ->
+    match_uri0(Pattern, Uri, []).
+
+match_uri0([String|Pattern], [String|Uri], Acc) ->
+    match_uri0(Pattern, Uri, Acc);
+match_uri0([Atom|Pattern], [String|Uri], Acc) when is_atom(Atom) ->
+    match_uri0(Pattern, Uri, [{Atom, String}|Acc]);
+match_uri0([], [], Acc) ->
+    {ok, Acc};
+match_uri0(_Any1, _Any2, _Acc) ->
+    none.
+
+
+-include_lib("eunit/include/eunit.hrl").
+
+content_test_() -> [
+        match_test({absolute, [], []},              [],               {ok, []}),
+        match_test({absolute, ["one", "two"], []},  ["one", "two"],   {ok, []}),
+        match_test({absolute, ["one", "two"], []},  ["one"],          none),
+        match_test({absolute, ["one"], []},         ["one", "two"],   none),
+        match_test({absolute, ["one", "two"], []},  ["one", "three"], none),
+        match_test({absolute, ["one", second], []}, ["one", "two"],   {ok, [{second, "two"}]}),
+        match_test({absolute, ["one", second], []}, ["one", "three"], {ok, [{second, "three"}]})
+    ].
+
+match_test(Pattern, Uri, Expected) ->
+    ?_assertEqual(Expected, match_uri(Pattern, Uri)).
 
 % end of file

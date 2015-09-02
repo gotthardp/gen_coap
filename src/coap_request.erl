@@ -47,9 +47,9 @@ reply_content(Channel, Request, Format, Content) ->
 handle_request(undefined, ChId, Channel, Message=#coap_message{}) ->
     % the receiver will be determined based on the URI
     case coap_server_content:get_handler(Message) of
-        undefined ->
+        none ->
             reply(Channel, Message, {error, not_found});
-        Handler ->
+        {Handler, Match} ->
             Handler ! {coap_request, ChId, Channel, undefined, Message}
     end.
 
