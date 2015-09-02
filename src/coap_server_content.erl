@@ -23,8 +23,8 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-add_handler(Process, Link) ->
-    gen_server:call(?MODULE, {add_handler, Process, Link}).
+add_handler(Process, Links) ->
+    gen_server:call(?MODULE, {add_handler, Process, Links}).
 
 get_handler(Message) ->
     UriPath = proplists:get_value(uri_path, Message#coap_message.options, []),
@@ -36,8 +36,9 @@ init(_Args) ->
         [{?MODULE, {absolute, [".well-known", "core"], []}}]
     }}.
 
-handle_call({add_handler, Process, Link}, _From, State=#state{reg=Reg}) ->
-    {reply, ok, State#state{reg=[{Process, Link} | Reg]}};
+handle_call({add_handler, Process, Links}, _From, State=#state{reg=Reg}) ->
+    Reg2 = Reg++[{Process, Link} || Link <- Links],
+    {reply, ok, State#state{reg=Reg2}};
 handle_call({get_handler, Uri}, _From, State=#state{reg=Reg}) ->
     {reply, lookup_uri(Reg, Uri), State}.
 
@@ -45,12 +46,12 @@ handle_cast(Request, State) ->
     io:fwrite("coap_server_content unknown cast ~p~n", [Request]),
     {noreply, State}.
 
-handle_info({coap_request, _ChId, Channel, _Ref, Request=#coap_message{method='get'}}, State=#state{reg=Reg}) ->
+handle_info({coap_request, _ChId, Channel, _Match, Request=#coap_message{method='get'}}, State=#state{reg=Reg}) ->
     coap_request:reply_content(Channel, Request,
         <<"application/link-format">>,
-        list_to_binary(core_link:encode(get_links(Reg)))),
+        list_to_binary(core_link:encode(lists:usort(get_links(Reg))))),
     {noreply, State};
-handle_info({coap_request, _ChId, Channel, _Ref, Request}, State) ->
+handle_info({coap_request, _ChId, Channel, _Match, Request}, State) ->
     coap_request:reply(Channel, Request, {error, method_not_allowed}),
     {noreply, State};
 handle_info(_Unknown, State) ->
@@ -65,13 +66,24 @@ terminate(_Reason, _State) ->
 % ask each handler to provide a link list
 get_links(Reg) ->
     lists:foldl(
-        fun
-            % the .well-known/core itself is not listed under .well-known/core
-            ({?MODULE, _Uri}, Acc) ->
-                Acc;
-            ({Handler, Uri}, Acc) ->
-                Acc++gen_server:call(Handler, {get_links, Uri})
-        end, [], Reg).
+        fun({Module, Uri}, Acc) -> Acc++get_links(Module, Uri) end,
+        [], Reg).
+
+% the .well-known/core itself is not listed under .well-known/core
+get_links(?MODULE, _Uri) ->
+    [];
+get_links(Handler, Uri) ->
+    case is_pattern(Uri) of
+        % for each pattern ask the handler to provide a list of resources
+        true -> gen_server:call(Handler, {get_links, Uri});
+        false -> [Uri]
+    end.
+
+is_pattern({absolute, Uri, _}) -> is_pattern0(Uri).
+
+is_pattern0([Atom|_List]) when is_atom(Atom) -> true;
+is_pattern0([_E|List]) -> is_pattern0(List);
+is_pattern0([]) -> false.
 
 lookup_uri(Reg, Uri) ->
     lists:foldl(
@@ -100,16 +112,16 @@ match_uri0(_Any1, _Any2, _Acc) ->
 -include_lib("eunit/include/eunit.hrl").
 
 content_test_() -> [
-        match_test({absolute, [], []},              [],               {ok, []}),
-        match_test({absolute, ["one", "two"], []},  ["one", "two"],   {ok, []}),
-        match_test({absolute, ["one", "two"], []},  ["one"],          none),
-        match_test({absolute, ["one"], []},         ["one", "two"],   none),
-        match_test({absolute, ["one", "two"], []},  ["one", "three"], none),
-        match_test({absolute, ["one", second], []}, ["one", "two"],   {ok, [{second, "two"}]}),
-        match_test({absolute, ["one", second], []}, ["one", "three"], {ok, [{second, "three"}]})
+        ?_assertEqual(false, is_pattern({absolute, [], []})),
+        ?_assertEqual(false, is_pattern({absolute, ["one"], []})),
+        ?_assertEqual(true,  is_pattern({absolute, ["one", second], []})),
+        ?_assertEqual({ok, []}, match_uri({absolute, [], []},              [])),
+        ?_assertEqual({ok, []}, match_uri({absolute, ["one", "two"], []},  ["one", "two"])),
+        ?_assertEqual(none,     match_uri({absolute, ["one", "two"], []},  ["one"])),
+        ?_assertEqual(none,     match_uri({absolute, ["one"], []},         ["one", "two"])),
+        ?_assertEqual(none,     match_uri({absolute, ["one", "two"], []},  ["one", "three"])),
+        ?_assertEqual({ok, [{second, "two"}]},   match_uri({absolute, ["one", second], []}, ["one", "two"])),
+        ?_assertEqual({ok, [{second, "three"}]}, match_uri({absolute, ["one", second], []}, ["one", "three"]))
     ].
-
-match_test(Pattern, Uri, Expected) ->
-    ?_assertEqual(Expected, match_uri(Pattern, Uri)).
 
 % end of file

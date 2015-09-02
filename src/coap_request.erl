@@ -50,7 +50,7 @@ handle_request(undefined, ChId, Channel, Message=#coap_message{}) ->
         none ->
             reply(Channel, Message, {error, not_found});
         {Handler, Match} ->
-            Handler ! {coap_request, ChId, Channel, undefined, Message}
+            Handler ! {coap_request, ChId, Channel, Match, Message}
     end.
 
 handle_response({Handler, Ref}, ChId, Channel, Message=#coap_message{}) ->
