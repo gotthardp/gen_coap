@@ -11,6 +11,8 @@
 -module(core_link).
 
 -export([decode/1, encode/1]).
+-import(core_iana, [content_formats/0]).
+-import(core_iana, [decode_enum/2, decode_enum/3, encode_enum/2, encode_enum/3]).
 
 decode(Binary) when is_binary(Binary) ->
     decode(binary_to_list(Binary));
@@ -36,19 +38,35 @@ encode_link_value({UriType, UriList, Attrs}) ->
 
 encode_link_params(Attrs) ->
     lists:foldl(
-        fun(Attr, Acc) -> Acc ++ encode_link_param(Attr)
+        fun(Attr, Acc) ->
+            case encode_link_param(Attr) of
+                undefined -> Acc;
+                Val -> Acc ++ Val
+            end
         end, [], Attrs).
 
 encode_link_uri(absolute, UriList) -> "</"++string:join(UriList, "/")++">";
 encode_link_uri(rootless, UriList) -> "<"++string:join(UriList, "/")++">".
 
+encode_link_param({_Any, undefined}) -> undefined;
+encode_link_param({ct, Value}) -> ";ct=" ++ content_type_to_int(Value);
 encode_link_param({rt, Value}) -> ";rt=\"" ++ Value ++ "\"";
+encode_link_param({sz, Value}) -> ";sz=" ++ integer_to_list(Value);
 encode_link_param({Other, Value}) -> ";"++atom_to_list(Other)++"=\"" ++ Value ++ "\"".
+
+content_type_to_int(Value) when is_binary(Value) ->
+    case encode_enum(content_formats(), Value) of
+        undefined -> "\"" ++ binary_to_list(Value) ++ "\"";
+        Num when is_integer(Num) -> integer_to_list(Num)
+    end;
+content_type_to_int(Value) when is_integer(Value) ->
+    integer_to_list(Value).
 
 
 -include_lib("eunit/include/eunit.hrl").
 
 codec_test_() -> [
+    ?_assertEqual("<link>;ct=0;sz=5", encode([{rootless, ["link"], [{ct, <<"text/plain">>}, {sz, 5}]}])),
     test_decode("<link>", [{rootless, ["link"], []}]),
     test_decode("</link1>;par=\"val\",<link2>;par=\"val\";par2=\"val2\"",
         [{absolute, ["link1"], [{par, "val"}]}, {rootless, ["link2"], [{par, "val"}, {par2, "val2"}]}]),
@@ -62,10 +80,6 @@ test_decode(String, Struct) ->
     Struct2 = decode(String),
     [?_assertEqual(Struct, Struct2),
     % try reverse encoding of the decoded structure
-    test_encode(Struct2, String)].
-
-test_encode(Struct, String) ->
-    String2 = encode(Struct),
-    ?_assertEqual(String, String2).
+    ?_assertEqual(String, encode(Struct2))].
 
 % end of file

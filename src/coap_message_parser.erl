@@ -11,6 +11,8 @@
 -module(coap_message_parser).
 
 -export([decode/1, decode_type/1, encode/1, reset_message/1]).
+-import(core_iana, [content_formats/0]).
+-import(core_iana, [decode_enum/2, decode_enum/3, encode_enum/2, encode_enum/3]).
 -include("coap.hrl").
 
 -define(VERSION, 1).
@@ -93,30 +95,6 @@ methods() -> [
     {{5,03}, {error, service_unavailable}},
     {{5,04}, {error, gateway_timeout}},
     {{5,05}, {error, proxying_not_supported}}].
-
-content_formats() ->
-    [{0, <<"text/plain">>},
-    {40, <<"application/link-format">>},
-    {41, <<"application/xml">>},
-    {42, <<"application/octet-stream">>},
-    {47, <<"application/exi">>},
-    {50, <<"application/json">>}].
-
-decode_enum(Dict, Value) ->
-    decode_enum(Dict, Value, undefined).
-decode_enum(Dict, Value, Default) ->
-    case [Y || {X, Y} <- Dict, X =:= Value] of
-        [Res] -> Res;
-        [] -> Default
-    end.
-
-encode_enum(Dict, Value) ->
-    encode_enum(Dict, Value, undefined).
-encode_enum(Dict, Value, Default) ->
-    case [X || {X, Y} <- Dict, Y =:= Value] of
-        [Res] -> Res;
-        [] -> Default
-    end.
 
 % option parsing is based on Patrick's CoAP Message Parsing in Erlang
 % https://gist.github.com/azdle/b2d477ff183b8bbb0aa0
