@@ -11,6 +11,10 @@ Tested with the following CoAP implementations:
  - C [libcoap](https://www.libcoap.net/)
  - [coap.me](http://coap.me/)
 
+Used in the following applications:
+ - [CoAP Publish-Subscribe interface to RabbitMQ](https://github.com/gotthardp/rabbitmq-coap-pubsub)
+
+This software is still under development and testing.
 The API may change without notice and some functions may not be implemented.
 Please [add an Issue](https://github.com/gotthardp/gen_coap/issues/new)
 if you find a bug or miss a feature.
