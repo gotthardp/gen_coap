@@ -103,6 +103,9 @@ in_con({in, BinMessage}, State=#state{cid=ChId, channel=Channel, receiver=Receiv
     Message = coap_message_parser:decode(BinMessage),
     io:fwrite("=> ~p~n", [Message]),
     case Message of
+        #coap_message{method=undefined, id=MsgId} ->
+            % provoked reset
+            coap_channel:send_ack(Channel, #coap_message{type=reset, id=MsgId});
         #coap_message{method=Method} when is_atom(Method) ->
             coap_request:handle_request(Receiver, ChId, Channel, Message);
         #coap_message{} ->
