@@ -21,7 +21,7 @@ if you find a bug or miss a feature.
 
 
 ## Usage
-![Build Status](https://api.travis-ci.org/gotthardp/gen_coap.png)
+[![Build Status](https://travis-ci.org/gotthardp/gen_coap.svg?branch=master)](https://travis-ci.org/gotthardp/gen_coap)
 
 ### Client
 
