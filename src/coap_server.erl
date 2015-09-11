@@ -24,10 +24,11 @@ start() ->
     start(normal, []).
 
 start(normal, []) ->
-    supervisor:start_link(?MODULE, [?DEFAULT_COAP_PORT]).
+    {ok, Pid} = supervisor:start_link(?MODULE, [?DEFAULT_COAP_PORT]),
+    Pid.
 
-stop(_State) ->
-    ok.
+stop(Pid) ->
+    exit(Pid, shutdown).
 
 
 init([InPort]) ->

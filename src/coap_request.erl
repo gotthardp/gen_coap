@@ -51,11 +51,11 @@ handle_request(undefined, ChId, Channel, Message=#coap_message{options=Options})
     % the receiver will be determined based on the URI
     Uri = proplists:get_value(uri_path, Options, []),
     case coap_server_content:get_handler(Uri) of
-        [] ->
-            reply(Channel, Message, {error, not_found});
-        [{Prefix, Module, Args}] ->
+        {Prefix, Module, Args} ->
             Suffix = lists:nthtail(length(Prefix), Uri),
-            call_module(Module, ChId, Channel, Suffix, Message)
+            call_module(Module, ChId, Channel, Suffix, Message);
+        undefined ->
+            reply(Channel, Message, {error, not_found})
     end.
 
 handle_response({Sender, Ref}, ChId, Channel, Message=#coap_message{}) ->

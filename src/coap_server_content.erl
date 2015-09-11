@@ -65,9 +65,20 @@ terminate(_Reason, _State) ->
 
 
 get_handler(Uri, Reg) ->
-    lists:filter(
-        fun({Prefix, _, _}) -> lists:prefix(Prefix, Uri) end,
-        Reg).
+    lists:foldl(
+        fun(Elem={Prefix, _, _}, Found) ->
+            case lists:prefix(Prefix, Uri) of
+                true -> one_with_longer_uri(Elem, Found);
+                false -> Found
+            end
+        end,
+        undefined, Reg).
+
+% select an entry with a longest prefix
+% this allows user to have one handler for "foo" and another for "foo/bar"
+one_with_longer_uri(Elem1, undefined) -> Elem1;
+one_with_longer_uri(Elem1={Prefix, _, _}, {Match, _, _}) when length(Prefix) > length(Match) -> Elem1;
+one_with_longer_uri(_Elem1, Elem2) -> Elem2.
 
 % ask each handler to provide a link list
 get_links(Reg) ->
