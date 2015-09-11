@@ -28,5 +28,5 @@ PARAM -> segment '=' string : {atomval('$1'), strval('$3')}.
 
 Erlang code.
 
-strval({_, _, Val}) -> Val.
+strval({_, _, Val}) -> list_to_binary(Val).
 atomval({_, _, Val}) -> list_to_atom(Val).

@@ -185,12 +185,12 @@ encode_option_list([], _LastNum, Acc) ->
 
 % RFC 7252
 decode_option(?OPTION_ETAG, OptVal) -> {etag, OptVal};
-decode_option(?OPTION_URI_PATH, OptVal) -> {uri_path, binary_to_list(OptVal)};
+decode_option(?OPTION_URI_PATH, OptVal) -> {uri_path, OptVal};
 decode_option(?OPTION_CONTENT_FORMAT, OptVal) ->
     Num = binary:decode_unsigned(OptVal),
     {content_format, decode_enum(content_formats(), Num, Num)};
 decode_option(?OPTION_MAX_AGE, OptVal) -> {max_age, binary:decode_unsigned(OptVal)};
-decode_option(?OPTION_URI_QUERY, OptVal) -> {uri_query, binary_to_list(OptVal)};
+decode_option(?OPTION_URI_QUERY, OptVal) -> {uri_query, OptVal};
 decode_option(?OPTION_ACCEPT, OptVal) -> {'accept', binary:decode_unsigned(OptVal)};
 % draft-ietf-core-observe-16
 decode_option(?OPTION_OBSERVE, OptVal) -> {observe, binary:decode_unsigned(OptVal)};
@@ -210,14 +210,14 @@ decode_block1(Num, M, SizEx) ->
 
 % RFC 7252
 encode_option({etag, OptVal}) -> {?OPTION_ETAG, OptVal};
-encode_option({uri_path, OptVal}) -> {?OPTION_URI_PATH, list_to_binary(OptVal)};
+encode_option({uri_path, OptVal}) -> {?OPTION_URI_PATH, OptVal};
 encode_option({content_format, OptVal}) when is_integer(OptVal) ->
     {?OPTION_CONTENT_FORMAT, binary:encode_unsigned(OptVal)};
 encode_option({content_format, OptVal}) ->
     Num = encode_enum(content_formats(), OptVal),
     {?OPTION_CONTENT_FORMAT, binary:encode_unsigned(Num)};
 encode_option({max_age, OptVal}) -> {?OPTION_MAX_AGE, binary:encode_unsigned(OptVal)};
-encode_option({uri_query, OptVal}) -> {?OPTION_URI_QUERY, list_to_binary(OptVal)};
+encode_option({uri_query, OptVal}) -> {?OPTION_URI_QUERY, OptVal};
 encode_option({'accept', OptVal}) -> {?OPTION_ACCEPT, binary:encode_unsigned(OptVal)};
 % draft-ietf-core-observe-16
 encode_option({observe, OptVal}) -> {?OPTION_OBSERVE, binary:encode_unsigned(OptVal)};
@@ -249,9 +249,9 @@ codec_test_()-> [
     test_codec(#coap_message{type=con, method=get, id=100,
         options=[{block1, [{0,true,128}]}, {observe, [1]}]}),
     test_codec(#coap_message{type=non, method=put, id=200, token= <<"token">>,
-        options=[{uri_path,[".well-known", "core"]}]}),
+        options=[{uri_path,[<<".well-known">>, <<"core">>]}]}),
     test_codec(#coap_message{type=non, method={ok, 'content'}, id=200, token= <<"token">>,
-        payload= <<"<url>">>, options=[{content_format, [<<"application/link-format">>]}, {uri_path,[".well-known", "core"]}]})].
+        payload= <<"<url>">>, options=[{content_format, [<<"application/link-format">>]}, {uri_path,[<<".well-known">>, <<"core">>]}]})].
 
 test_codec(Message) ->
     Message2 = encode(Message),

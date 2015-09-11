@@ -14,46 +14,46 @@
 
 -export([start_link/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
--export([add_handler/2, get_handler/1]).
-
--include("coap.hrl").
+-export([coap_get/4]).
+-export([add_handler/3, get_handler/1]).
 
 -record(state, {reg}).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-add_handler(Process, Links) ->
-    gen_server:call(?MODULE, {add_handler, Process, Links}).
+coap_get(_ChId, Channel, [], Request) ->
+    Links = gen_server:call(?MODULE, {get_links}),
+    coap_request:reply_content(Channel, Request,
+        <<"application/link-format">>, core_link:encode(Links));
+coap_get(_ChId, Channel, _Else, Request) ->
+    coap_request:reply(Channel, Request, {error, not_found}).
 
-get_handler(Message) ->
-    UriPath = proplists:get_value(uri_path, Message#coap_message.options, []),
-    gen_server:call(?MODULE, {get_handler, UriPath}).
+add_handler(Prefix, Module, Args) ->
+    gen_server:call(?MODULE, {add_handler, Prefix, Module, Args}).
+
+get_handler(Uri) ->
+    gen_server:call(?MODULE, {get_handler, Uri}).
 
 init(_Args) ->
     {ok, #state{reg=
         % RFC 6690, Section 4
-        [{?MODULE, {absolute, [".well-known", "core"], []}}]
+        [{[<<".well-known">>, <<"core">>], ?MODULE, undefined}]
     }}.
 
-handle_call({add_handler, Process, Links}, _From, State=#state{reg=Reg}) ->
-    Reg2 = Reg++[{Process, Link} || Link <- Links],
-    {reply, ok, State#state{reg=Reg2}};
-handle_call({get_handler, Uri}, _From, State=#state{reg=Reg}) ->
-    {reply, lookup_uri(Reg, Uri), State}.
+handle_call({add_handler, Prefix, Module, Args}, _From, State=#state{reg=Reg}) ->
+    {reply, ok, State#state{reg=[{Prefix, Module, Args}|Reg]}};
 
-handle_cast(Request, State) ->
-    io:fwrite("coap_server_content unknown cast ~p~n", [Request]),
+handle_call({get_handler, Uri}, _From, State=#state{reg=Reg}) ->
+    {reply, get_handler(Uri, Reg), State};
+
+handle_call({get_links}, _From, State=#state{reg=Reg}) ->
+    {reply, lists:usort(get_links(Reg)), State}.
+
+
+handle_cast(_Unknown, State) ->
     {noreply, State}.
 
-handle_info({coap_request, _ChId, Channel, _Match, Request=#coap_message{method='get'}}, State=#state{reg=Reg}) ->
-    coap_request:reply_content(Channel, Request,
-        <<"application/link-format">>,
-        list_to_binary(core_link:encode(lists:usort(get_links(Reg))))),
-    {noreply, State};
-handle_info({coap_request, _ChId, Channel, _Match, Request}, State) ->
-    coap_request:reply(Channel, Request, {error, method_not_allowed}),
-    {noreply, State};
 handle_info(_Unknown, State) ->
     {noreply, State}.
 
@@ -63,65 +63,24 @@ code_change(_OldVsn, State, _Extra) ->
 terminate(_Reason, _State) ->
     ok.
 
+
+get_handler(Uri, Reg) ->
+    lists:filter(
+        fun({Prefix, _, _}) -> lists:prefix(Prefix, Uri) end,
+        Reg).
+
 % ask each handler to provide a link list
 get_links(Reg) ->
     lists:foldl(
-        fun({Module, Uri}, Acc) -> Acc++get_links(Module, Uri) end,
+        fun({Prefix, Module, Args}, Acc) -> Acc++get_links(Prefix, Module, Args) end,
         [], Reg).
 
-% the .well-known/core itself is not listed under .well-known/core
-get_links(?MODULE, _Uri) ->
-    [];
-get_links(Handler, Uri) ->
-    case is_pattern(Uri) of
+get_links(Prefix, Module, Args) ->
+    case erlang:function_exported(Module, coap_discover, 2) of
         % for each pattern ask the handler to provide a list of resources
-        true -> gen_server:call(Handler, {get_links, Uri});
-        false -> [Uri]
+        true -> apply(Module, coap_discover, [Prefix, Args]);
+        false -> []
     end.
 
-is_pattern({absolute, Uri, _}) -> is_pattern0(Uri).
-
-is_pattern0([Atom|_List]) when is_atom(Atom) -> true;
-is_pattern0([_E|List]) -> is_pattern0(List);
-is_pattern0([]) -> false.
-
-lookup_uri(Reg, Uri) ->
-    lists:foldl(
-        fun ({Handler, Pattern}, none) ->
-                case match_uri(Pattern, Uri) of
-                    {ok, Match} -> {Handler, Match};
-                    none -> none
-                end;
-            (_Any, Result) ->
-                Result
-        end, none, Reg).
-
-match_uri({absolute, Pattern, _}, Uri) ->
-    match_uri0(Pattern, Uri, []).
-
-match_uri0([String|Pattern], [String|Uri], Acc) ->
-    match_uri0(Pattern, Uri, Acc);
-match_uri0([Atom|Pattern], [String|Uri], Acc) when is_atom(Atom) ->
-    match_uri0(Pattern, Uri, [{Atom, String}|Acc]);
-match_uri0([], [], Acc) ->
-    {ok, Acc};
-match_uri0(_Any1, _Any2, _Acc) ->
-    none.
-
-
--include_lib("eunit/include/eunit.hrl").
-
-content_test_() -> [
-        ?_assertEqual(false, is_pattern({absolute, [], []})),
-        ?_assertEqual(false, is_pattern({absolute, ["one"], []})),
-        ?_assertEqual(true,  is_pattern({absolute, ["one", second], []})),
-        ?_assertEqual({ok, []}, match_uri({absolute, [], []},              [])),
-        ?_assertEqual({ok, []}, match_uri({absolute, ["one", "two"], []},  ["one", "two"])),
-        ?_assertEqual(none,     match_uri({absolute, ["one", "two"], []},  ["one"])),
-        ?_assertEqual(none,     match_uri({absolute, ["one"], []},         ["one", "two"])),
-        ?_assertEqual(none,     match_uri({absolute, ["one", "two"], []},  ["one", "three"])),
-        ?_assertEqual({ok, [{second, "two"}]},   match_uri({absolute, ["one", second], []}, ["one", "two"])),
-        ?_assertEqual({ok, [{second, "three"}]}, match_uri({absolute, ["one", second], []}, ["one", "three"]))
-    ].
 
 % end of file

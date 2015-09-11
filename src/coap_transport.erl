@@ -90,7 +90,8 @@ sent_non({in, BinMessage}, State=#state{cid=ChId, channel=Channel, receiver=Rece
     io:fwrite("-> ~p~n", [Message]),
     case Message of
         #coap_message{type=reset, id=MsgId} ->
-            coap_request:handle_error(Receiver, ChId, Channel, {MsgId, reset})
+            coap_request:handle_error(Receiver, ChId, Channel, {MsgId, reset}),
+            request_complete(Channel, Message)
     end,
     next_state(got_rst, State).
 
@@ -161,9 +162,10 @@ await_pack({timeout, await_pack}, State=#state{sock=Sock, cid=ChId, msg=Message,
     Sock ! {datagram, ChId, BinMessage},
     Timeout2 = Timeout*2,
     next_state(await_pack, State#state{retry_time=Timeout2, retry_count=Count+1}, Timeout2);
-await_pack({timeout, await_pack}, State=#state{cid=ChId, channel=Channel, tid={out, MsgId}, receiver=Receiver}) ->
+await_pack({timeout, await_pack}, State=#state{cid=ChId, channel=Channel, tid={out, MsgId}, receiver=Receiver, msg=Message}) ->
     io:fwrite("-> timeout ~p~n", [MsgId]),
     coap_request:handle_error(Receiver, ChId, Channel, {MsgId, timeout}),
+    request_complete(Channel, Message),
     next_state(aack_sent, State).
 
 aack_sent({in, _Ack}, State) ->

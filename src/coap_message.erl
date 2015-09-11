@@ -9,18 +9,15 @@
 
 % convenience functions for message construction
 -module(coap_message).
--export([content/2, content/3, response/1, response/2, response/3]).
+-export([new/3, response/1, response/2, response/3, set/3, set_payload/2]).
 
 -include("coap.hrl").
 
-content(Format, Payload) ->
-    content(Format, Payload, #coap_message{}).
-
-content(Format, Payload, Msg) ->
-    Msg#coap_message{
-        method={ok, content},
-        options=[{content_format, [Format]}],
-        payload=Payload
+new(Type, Token, Method) ->
+    #coap_message{
+        type=Type,
+        token=Token,
+        method=Method
     }.
 
 response(Request=#coap_message{type=non}) ->
@@ -35,17 +32,35 @@ response(Request=#coap_message{type=con}) ->
         token=Request#coap_message.token
     }.
 
-response(Request, Method) ->
-    Res = response(Request),
-    Res#coap_message{
+response(Method, Request) ->
+    set_method(Method,
+        response(Request)).
+
+response(Method, Payload, Request) ->
+    set_method(Method,
+        set_payload(Payload,
+            response(Request))).
+
+
+set(_Option, undefined, Msg) ->
+    Msg;
+set(Option, Value, Msg=#coap_message{options=Options}) ->
+    Msg#coap_message{
+        options=[{Option, [Value]}|Options]
+    }.
+
+set_method(Method, Msg) ->
+    Msg#coap_message{
         method=Method
     }.
 
-response(Request, Method, Payload) ->
-    Res = response(Request),
-    Res#coap_message{
-        method=Method,
+set_payload(Payload, Msg) when is_binary(Payload) ->
+    Msg#coap_message{
         payload=Payload
+    };
+set_payload(Payload, Msg) when is_list(Payload) ->
+    Msg#coap_message{
+        payload=list_to_binary(Payload)
     }.
 
 % end of file

@@ -32,35 +32,67 @@ ack(Channel, Request) ->
 
 reply(Channel, Request, Method) ->
     send_message(Channel,
-        coap_message:response(Request, Method)).
+        coap_message:response(Method, Request)).
 
 reply(Channel, Request, Method, Payload) ->
     send_message(Channel,
-        coap_message:response(Request, Method, Payload)).
+        coap_message:response(Method, Payload, Request)).
 
 reply_content(Channel, Request, Format, Content) ->
     send_message(Channel,
-        coap_message:content(Format, Content, coap_message:response(Request))).
+        coap_message:set(etag, binary:part(crypto:hash(sha, Content), {0,4}),
+            coap_message:set(content_format, Format,
+                coap_message:set_payload(Content,
+                    coap_message:response({ok, content}, Request))))).
 
 
 % when acting as a server, the receiver is uknown
-handle_request(undefined, ChId, Channel, Message=#coap_message{}) ->
+handle_request(undefined, ChId, Channel, Message=#coap_message{options=Options}) ->
     % the receiver will be determined based on the URI
-    case coap_server_content:get_handler(Message) of
-        none ->
+    Uri = proplists:get_value(uri_path, Options, []),
+    case coap_server_content:get_handler(Uri) of
+        [] ->
             reply(Channel, Message, {error, not_found});
-        {Handler, Match} ->
-            Handler ! {coap_request, ChId, Channel, Match, Message}
+        [{Prefix, Module, Args}] ->
+            Suffix = lists:nthtail(length(Prefix), Uri),
+            call_module(Module, ChId, Channel, Suffix, Message)
     end.
 
-handle_response({Handler, Ref}, ChId, Channel, Message=#coap_message{}) ->
-    Handler ! {coap_response, ChId, Channel, Ref, Message}.
+handle_response({Sender, Ref}, ChId, Channel, Message=#coap_message{}) ->
+    Sender ! {coap_response, ChId, Channel, Ref, Message}.
 
-handle_ack({Handler, Ref}, ChId, Channel, _Message) ->
-    Handler ! {coap_ack, ChId, Channel, Ref}.
+handle_ack({Sender, Ref}, ChId, Channel, _Message) ->
+    Sender ! {coap_ack, ChId, Channel, Ref}.
 
-handle_error({Handler, Ref}, ChId, Channel, {MsgId, Error}) ->
-    Handler ! {coap_error, ChId, Channel, Ref, Error}.
+handle_error({Sender, Ref}, ChId, Channel, {MsgId, Error}) ->
+    Sender ! {coap_error, ChId, Channel, Ref, Error}.
+
+
+call_module(Module, ChId, Channel, Suffix, Message=#coap_message{method='get', options=Options}) ->
+    case proplists:get_value(observe, Options) of
+        [0] ->
+            call_module0(Module, [coap_subscribe, coap_get], ChId, Channel, Suffix, Message);
+        [1] ->
+            call_module0(Module, [coap_unsubscribe, coap_get], ChId, Channel, Suffix, Message);
+        undefined ->
+            call_module0(Module, [coap_get], ChId, Channel, Suffix, Message);
+        _SomethingWeird ->
+            reply(Channel, Message, {error, bad_option})
+    end;
+call_module(Module, ChId, Channel, Suffix, Message=#coap_message{method='post'}) ->
+    call_module0(Module, [coap_post], ChId, Channel, Suffix, Message);
+call_module(Module, ChId, Channel, Suffix, Message=#coap_message{method='put'}) ->
+    call_module0(Module, [coap_put], ChId, Channel, Suffix, Message);
+call_module(Module, ChId, Channel, Suffix, Message=#coap_message{method='delete'}) ->
+    call_module0(Module, [coap_delete], ChId, Channel, Suffix, Message).
+
+call_module0(Module, [Method|MoreMethods], ChId, Channel, Suffix, Message) ->
+    case erlang:function_exported(Module, Method, 4) of
+        true -> apply(Module, Method, [ChId, Channel, Suffix, Message]);
+        false -> call_module0(Module, MoreMethods, ChId, Channel, Suffix, Message)
+    end;
+call_module0(_Module, [], _ChId, Channel, _Suffix, Message) ->
+    reply(Channel, Message, {error, method_not_allowed}).
 
 
 send_message(Channel, Message) ->
