@@ -24,21 +24,41 @@ if you find a bug or miss a feature.
 [![Build Status](https://travis-ci.org/gotthardp/gen_coap.svg?branch=master)](https://travis-ci.org/gotthardp/gen_coap)
 
 ### Client
-
 Get a resource by:
 ```erlang
 {ok, content, Data} = coap_client:request(get, "coap://coap.me:5683")
 ```
+No application need to be started.
 
 ### Server
+The server out of a box does not offer any resources. To offer CoAP access to
+some server resources you need to build and register a custom handler.
+```erlang
+coap_server_content:add_handler(["prefix"], custom_handler, Args)
+```
+The custom handler should implement one or more callbacks that the server invokes
+upon reception of a CoAP request. All callbacks are optional.
+ - `coap_discover(Prefix, Args)` is called when a CoAP client asks for the list of
+   ".well-known/core" resources. The function shall return a list of resources
+   with a given *Prefix*.
+ - `coap_get({IP, Port}, Pid, Suffix, Request)` is called when the server receives
+   a GET request for a resource *Prefix*/*Suffix*.
+ - `coap_subscribe({IP, Port}, Pid, Suffix, Request)` is called upon
+   a GET request with an Observe=0 option for a resource *Prefix*/*Suffix*.
+ - `coap_unsubscribe({IP, Port}, Pid, Suffix, Request)` is called upon
+   a GET request with an Observe=1 option for a resource *Prefix*/*Suffix*.
+ - `coap_post({IP, Port}, Pid, Suffix, Request)` is called upon
+   a POST request for a resource *Prefix*/*Suffix*.
+ - `coap_put({IP, Port}, Pid, Suffix, Request)` is called upon
+   a PUT request for a resource *Prefix*/*Suffix*.
+ - `coap_delete({IP, Port}, Pid, Suffix, Request)` is called upon
+   a DELETE request for a resource *Prefix*/*Suffix*.
 
-Build and start the server:
+You can start the server from command line:
 
-    $ cd gen_coap
-    $ make
     $ erl -pa ebin
     1> coap_server:start().
 
-Then, invoke the client and access the server resources:
+Then, you can invoke the client and access the server resources:
 
     $ ./coap-client coap://127.0.0.1/.well-known/core
