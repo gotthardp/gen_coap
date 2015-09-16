@@ -45,7 +45,7 @@ await_response(Channel, Ref, Resource) ->
             case proplists:get_value(block2, Options) of
                 [{Num, true, Size}] ->
                     % more blocks follow, ask for more
-                    {ok, Ref2} = coap_request:send(Channel, get, [{block2, [{Num+1, false, Size}]}]),
+                    {ok, Ref2} = coap_request:send(Channel, con, get, <<>>, [{block2, [{Num+1, false, Size}]}]),
                     await_response(Channel, Ref2, <<Resource/binary, Data/binary>>);
                 _Else ->
                     % not segmented
