@@ -53,7 +53,7 @@ handle_request(undefined, ChId, Channel, Message=#coap_message{options=Options})
     case coap_server_content:get_handler(Uri) of
         {Prefix, Module, Args} ->
             Suffix = lists:nthtail(length(Prefix), Uri),
-            call_module(Module, ChId, Channel, Suffix, Message);
+            call_module(Module, ChId, Channel, Prefix, Suffix, Message);
         undefined ->
             reply(Channel, Message, {error, not_found})
     end.
@@ -68,30 +68,30 @@ handle_error({Sender, Ref}, ChId, Channel, {MsgId, Error}) ->
     Sender ! {coap_error, ChId, Channel, Ref, Error}.
 
 
-call_module(Module, ChId, Channel, Suffix, Message=#coap_message{method='get', options=Options}) ->
+call_module(Module, ChId, Channel, Prefix, Suffix, Message=#coap_message{method='get', options=Options}) ->
     case proplists:get_value(observe, Options) of
         [0] ->
-            call_module0(Module, [coap_subscribe, coap_get], ChId, Channel, Suffix, Message);
+            call_module0(Module, [coap_subscribe, coap_get], ChId, Channel, Prefix, Suffix, Message);
         [1] ->
-            call_module0(Module, [coap_unsubscribe, coap_get], ChId, Channel, Suffix, Message);
+            call_module0(Module, [coap_unsubscribe, coap_get], ChId, Channel, Prefix, Suffix, Message);
         undefined ->
-            call_module0(Module, [coap_get], ChId, Channel, Suffix, Message);
+            call_module0(Module, [coap_get], ChId, Channel, Prefix, Suffix, Message);
         _SomethingWeird ->
             reply(Channel, Message, {error, bad_option})
     end;
-call_module(Module, ChId, Channel, Suffix, Message=#coap_message{method='post'}) ->
-    call_module0(Module, [coap_post], ChId, Channel, Suffix, Message);
-call_module(Module, ChId, Channel, Suffix, Message=#coap_message{method='put'}) ->
-    call_module0(Module, [coap_put], ChId, Channel, Suffix, Message);
-call_module(Module, ChId, Channel, Suffix, Message=#coap_message{method='delete'}) ->
-    call_module0(Module, [coap_delete], ChId, Channel, Suffix, Message).
+call_module(Module, ChId, Channel, Prefix, Suffix, Message=#coap_message{method='post'}) ->
+    call_module0(Module, [coap_post], ChId, Channel, Prefix, Suffix, Message);
+call_module(Module, ChId, Channel, Prefix, Suffix, Message=#coap_message{method='put'}) ->
+    call_module0(Module, [coap_put], ChId, Channel, Prefix, Suffix, Message);
+call_module(Module, ChId, Channel, Prefix, Suffix, Message=#coap_message{method='delete'}) ->
+    call_module0(Module, [coap_delete], ChId, Channel, Prefix, Suffix, Message).
 
-call_module0(Module, [Method|MoreMethods], ChId, Channel, Suffix, Message) ->
-    case erlang:function_exported(Module, Method, 4) of
-        true -> apply(Module, Method, [ChId, Channel, Suffix, Message]);
-        false -> call_module0(Module, MoreMethods, ChId, Channel, Suffix, Message)
+call_module0(Module, [Method|MoreMethods], ChId, Channel, Prefix, Suffix, Message) ->
+    case erlang:function_exported(Module, Method, 5) of
+        true -> apply(Module, Method, [ChId, Channel, Prefix, Suffix, Message]);
+        false -> call_module0(Module, MoreMethods, ChId, Channel, Prefix, Suffix, Message)
     end;
-call_module0(_Module, [], _ChId, Channel, _Suffix, Message) ->
+call_module0(_Module, [], _ChId, Channel, _Prefix, _Suffix, Message) ->
     reply(Channel, Message, {error, method_not_allowed}).
 
 

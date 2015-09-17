@@ -24,8 +24,7 @@ start() ->
     start(normal, []).
 
 start(normal, []) ->
-    {ok, Pid} = supervisor:start_link(?MODULE, [?DEFAULT_COAP_PORT]),
-    Pid.
+    supervisor:start_link(?MODULE, [?DEFAULT_COAP_PORT]).
 
 stop(Pid) ->
     exit(Pid, shutdown).

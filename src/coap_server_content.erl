@@ -14,7 +14,7 @@
 
 -export([start_link/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
--export([coap_get/4]).
+-export([coap_get/5]).
 -export([add_handler/3, get_handler/1]).
 
 -record(state, {reg}).
@@ -22,11 +22,11 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-coap_get(_ChId, Channel, [], Request) ->
+coap_get(_ChId, Channel, _Prefix, [], Request) ->
     Links = gen_server:call(?MODULE, {get_links}),
     coap_request:reply_content(Channel, Request,
         <<"application/link-format">>, core_link:encode(Links));
-coap_get(_ChId, Channel, _Else, Request) ->
+coap_get(_ChId, Channel, _Prefix, _Else, Request) ->
     coap_request:reply(Channel, Request, {error, not_found}).
 
 add_handler(Prefix, Module, Args) ->
