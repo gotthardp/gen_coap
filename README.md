@@ -49,7 +49,7 @@ upon reception of a CoAP request. All callbacks are optional.
 You can start the server from command line:
 
     $ erl -pa ebin
-    1> coap_server:start().
+    1> application:start(gen_coap).
 
 Then, you can invoke the client and access the server resources:
 

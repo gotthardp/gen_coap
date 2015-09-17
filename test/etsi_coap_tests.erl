@@ -16,15 +16,14 @@
 empty_server_test_() ->
     {setup,
         fun() ->
-            {ok, Pid} = coap_server:start(),
-            Pid
+            application:start(gen_coap)
         end,
-        fun(ServerPid) ->
-            coap_server:stop(ServerPid)
+        fun(_State) ->
+            application:stop(gen_coap)
         end,
         fun empty_server/1}.
 
-empty_server(_ServerPid) ->
+empty_server(_State) ->
     [
     % provoked reset
     ?_assertEqual(ok, coap_client:ping("coap://127.0.0.1")),

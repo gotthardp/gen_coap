@@ -19,7 +19,7 @@
 -define(VERSION, 1).
 -define(MAX_MESSAGE_ID, 65535). % 16-bit number
 
--record(state, {sup, sock, cid, tokens, trans, nextmid}).
+-record(state, {sup, sock, cid, tokens, trans, nextmid, obs}).
 
 -include("coap.hrl").
 
@@ -46,7 +46,7 @@ init([SupPid, SockPid, ChId, ObsPid]) ->
     % we want to get called upon termination
     process_flag(trap_exit, true),
     {ok, #state{sup=SupPid, sock=SockPid, cid=ChId, tokens=dict:new(),
-        trans=dict:new(), nextmid=first_mid()}}.
+        trans=dict:new(), nextmid=first_mid(), obs=ObsPid}}.
 
 handle_call(_Unknown, _From, State) ->
     {reply, unknown_call, State}.
@@ -60,9 +60,8 @@ handle_cast({send_message, Message, Receiver}, State) ->
 % outgoing ACK(2) or RST(3)
 handle_cast({send_ack, Message=#coap_message{id=MsgId}}, State) ->
     transport_ack({in, MsgId}, Message, State);
-handle_cast(shutdown, State=#state{sup=SupPid}) ->
-    exit(SupPid, normal),
-    {noreply, State};
+handle_cast(shutdown, State) ->
+    {stop, normal, State};
 handle_cast(Request, State) ->
     io:fwrite("coap_channel unknown cast ~p~n", [Request]),
     {noreply, State}.
@@ -138,9 +137,9 @@ handle_info(Info, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-terminate(Reason, #state{sock=SockPid, cid=ChId}) ->
+terminate(Reason, #state{sup=SupPid, sock=SockPid, cid=ChId}) ->
     io:fwrite("channel ~p finished ~p~n", [ChId, Reason]),
-    SockPid ! {terminated, ChId},
+    SockPid ! {terminated, SupPid, ChId},
     ok.
 
 

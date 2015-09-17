@@ -22,7 +22,7 @@ start_link(SockPid, ChId) ->
     {ok, ChPid} = supervisor:start_child(SupPid,
         {coap_channel,
             {coap_channel, start_link, [SupPid, SockPid, ChId, ObsPid]},
-            permanent, 5000, worker, []}),
+            transient, 5000, worker, []}),
     {ok, SupPid, ChPid}.
 
 init([]) ->

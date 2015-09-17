@@ -27,7 +27,7 @@ start(normal, []) ->
     supervisor:start_link(?MODULE, [?DEFAULT_COAP_PORT]).
 
 stop(Pid) ->
-    exit(Pid, shutdown).
+    ok.
 
 
 init([InPort]) ->
