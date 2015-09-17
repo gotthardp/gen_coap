@@ -35,8 +35,8 @@ init([InPort]) ->
         {coap_server_content,
             {coap_server_content, start_link, []},
             permanent, 5000, worker, []},
-        {coap_channel_sup,
-            {coap_channel_sup, start_link, []},
+        {coap_channel_sup_sup,
+            {coap_channel_sup_sup, start_link, []},
             permanent, infinity, supervisor, []},
         {coap_udp_socket,
             % for convenience register the main worker under the application name
@@ -44,7 +44,7 @@ init([InPort]) ->
             permanent, 5000, worker, []}
     ]}}.
 
-channel_sup(SupPid) -> child(SupPid, coap_channel_sup).
+channel_sup(SupPid) -> child(SupPid, coap_channel_sup_sup).
 
 child(SupPid, Id) ->
     [Pid] = [Pid || {Id1, Pid, _, _} <- supervisor:which_children(SupPid),

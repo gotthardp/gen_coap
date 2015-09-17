@@ -51,12 +51,12 @@ handle_call({get_channel, ChId}, _From, State=#state{chans=Chans, pool=undefined
         {ok, Pid} ->
             {reply, {ok, Pid}, State};
         undefined ->
-            {ok, Pid} = coap_channel:start_link(self(), ChId),
+            {ok, _, Pid} = coap_channel_sup:start_link(self(), ChId),
             {reply, {ok, Pid}, store_channel(ChId, Pid, State)}
     end;
 handle_call({get_channel, ChId}, _From, State=#state{pool=PoolPid}) ->
-    case start_channel(PoolPid, ChId) of
-        {ok, Pid} ->
+    case coap_channel_sup_sup:start_channel(PoolPid, ChId) of
+        {ok, _, Pid} ->
             {reply, {ok, Pid}, store_channel(ChId, Pid, State)};
         Error ->
             {reply, Error, State}
@@ -82,14 +82,13 @@ handle_info({udp, _Socket, PeerIP, PeerPortNo, Data}, State=#state{chans=Chans, 
             Pid ! {datagram, Data},
             {noreply, State};
         undefined when is_pid(PoolPid) ->
-            case start_channel(PoolPid, ChId) of
+            case coap_channel_sup_sup:start_channel(PoolPid, ChId) of
                 % new channel created
-                {ok, Pid} ->
+                {ok, _, Pid} ->
                     Pid ! {datagram, Data},
                     {noreply, store_channel(ChId, Pid, State)};
-                % channel processor crashed and will be restarted soon
-                % drop this packet and wait for retransmission
-                {error, already_present} ->
+                % drop this packet
+                {error, _} ->
                     {noreply, State}
             end;
         undefined ->
@@ -102,7 +101,7 @@ handle_info({datagram, {PeerIP, PeerPortNo}, Data}, State=#state{sock=Socket}) -
     {noreply, State};
 handle_info({terminated, ChId}, State=#state{chans=Chans, pool=PoolPid}) ->
     Chans2 = dict:erase(ChId, Chans),
-    coap_channel_sup:delete_channel(PoolPid, ChId),
+    coap_channel_sup_sup:delete_channel(PoolPid, ChId),
     {noreply, State#state{chans=Chans2}};
 handle_info(Info, State) ->
     io:fwrite("coap_udp_socket unexpected ~p~n", [Info]),
@@ -126,13 +125,6 @@ find_channel(ChId, Chans) ->
             end;
         % we got data via a new channel
         error -> undefined
-    end.
-
-start_channel(PoolPid, ChId) ->
-    case coap_channel_sup:start_channel(PoolPid, ChId) of
-        {ok, Pid} -> {ok, Pid};
-        {error, {already_started, Pid}} -> {ok, Pid};
-        {error, OtherError} -> {error, OtherError}
     end.
 
 store_channel(ChId, Pid, State=#state{chans=Chans}) ->

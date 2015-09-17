@@ -12,19 +12,19 @@
 -module(coap_channel).
 -behaviour(gen_server).
 
--export([start_link/2, close/1]).
+-export([start_link/4, close/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
 -export([send_request/2, send_request/3, send_message/2, send_message/3, send_ack/2]).
 
 -define(VERSION, 1).
 -define(MAX_MESSAGE_ID, 65535). % 16-bit number
 
--record(state, {sock, cid, tokens, trans, nextmid}).
+-record(state, {sup, sock, cid, tokens, trans, nextmid}).
 
 -include("coap.hrl").
 
-start_link(SockPid, ChId) ->
-    gen_server:start_link(?MODULE, [SockPid, ChId], []).
+start_link(SupPid, SockPid, ChId, ObsPid) ->
+    gen_server:start_link(?MODULE, [SupPid, SockPid, ChId, ObsPid], []).
 
 close(Pid) ->
     gen_server:cast(Pid, shutdown).
@@ -42,10 +42,10 @@ send_message(Pid, Message, Ref) ->
 send_ack(Pid, Message) ->
     gen_server:cast(Pid, {send_ack, Message}).
 
-init([SockPid, ChId]) ->
+init([SupPid, SockPid, ChId, ObsPid]) ->
     % we want to get called upon termination
     process_flag(trap_exit, true),
-    {ok, #state{sock=SockPid, cid=ChId, tokens=dict:new(),
+    {ok, #state{sup=SupPid, sock=SockPid, cid=ChId, tokens=dict:new(),
         trans=dict:new(), nextmid=first_mid()}}.
 
 handle_call(_Unknown, _From, State) ->
@@ -60,8 +60,9 @@ handle_cast({send_message, Message, Receiver}, State) ->
 % outgoing ACK(2) or RST(3)
 handle_cast({send_ack, Message=#coap_message{id=MsgId}}, State) ->
     transport_ack({in, MsgId}, Message, State);
-handle_cast(shutdown, State) ->
-    {stop, normal, State};
+handle_cast(shutdown, State=#state{sup=SupPid}) ->
+    exit(SupPid, normal),
+    {noreply, State};
 handle_cast(Request, State) ->
     io:fwrite("coap_channel unknown cast ~p~n", [Request]),
     {noreply, State}.
@@ -137,12 +138,9 @@ handle_info(Info, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-terminate(normal, #state{sock=SockPid, cid=ChId}) ->
-    io:fwrite("channel ~p finished~n", [ChId]),
+terminate(Reason, #state{sock=SockPid, cid=ChId}) ->
+    io:fwrite("channel ~p finished ~p~n", [ChId, Reason]),
     SockPid ! {terminated, ChId},
-    ok;
-terminate(_Reason, _State) ->
-    % will get restarted
     ok.
 
 

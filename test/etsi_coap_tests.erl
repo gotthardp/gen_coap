@@ -26,6 +26,8 @@ empty_server_test_() ->
 
 empty_server(_ServerPid) ->
     [
+    % provoked reset
+    ?_assertEqual(ok, coap_client:ping("coap://127.0.0.1")),
     % discovery
     ?_assertEqual({error, not_found}, coap_client:request(get, "coap://127.0.0.1")),
     ?_assertEqual({error, not_found}, coap_client:request(get, "coap://127.0.0.1/")),

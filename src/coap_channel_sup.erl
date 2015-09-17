@@ -7,26 +7,27 @@
 % Copyright (c) 2015 Petr Gotthard <petr.gotthard@centrum.cz>
 %
 
-% stores one channel handler per endpoint
-% when communication ceases the respective channel exits normally
+% supervisor for a single channel
 -module(coap_channel_sup).
 -behaviour(supervisor).
 
--export([start_link/0, start_channel/2, delete_channel/2, init/1]).
+-export([start_link/2, init/1]).
 
-start_link() ->
-    supervisor:start_link(?MODULE, []).
-
-start_channel(SupPid, ChId) ->
-    supervisor:start_child(SupPid,
-        {ChId,
-            {coap_channel, start_link, [self(), ChId]},
-            transient, 5000, worker, []}).
-
-delete_channel(SupPid, ChId) ->
-    supervisor:delete_child(SupPid, ChId).
+start_link(SockPid, ChId) ->
+    {ok, SupPid} = supervisor:start_link(?MODULE, []),
+    {ok, ObsPid} = supervisor:start_child(SupPid,
+        {coap_observer_sup,
+            {coap_observer_sup, start_link, []},
+            permanent, infinity, supervisor, []}),
+    {ok, ChPid} = supervisor:start_child(SupPid,
+        {coap_channel,
+            {coap_channel, start_link, [SupPid, SockPid, ChId, ObsPid]},
+            permanent, 5000, worker, []}),
+    {ok, SupPid, ChPid}.
 
 init([]) ->
-    {ok, {{one_for_one, 3, 10}, []}}.
+    % crash of any worker will terminate the supervisor and invoke start_link/2 again
+    {ok, {{one_for_all, 0, 1}, []}}.
+
 
 % end of file

@@ -150,8 +150,10 @@ await_pack({in, BinAck}, State=#state{cid=ChId, channel=Channel, receiver=Receiv
     Ack = coap_message_parser:decode(BinAck),
     io:fwrite("-> ~p~n", [Ack]),
     case Ack of
-        #coap_message{method=undefined} ->
+        #coap_message{type=ack, method=undefined} ->
             coap_request:handle_ack(Receiver, ChId, Channel, Ack);
+        #coap_message{type=reset, id=MsgId} ->
+            coap_request:handle_error(Receiver, ChId, Channel, {MsgId, reset});
         #coap_message{} ->
             coap_request:handle_response(Receiver, ChId, Channel, Ack),
             request_complete(Channel, Ack)
