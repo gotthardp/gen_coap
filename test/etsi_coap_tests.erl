@@ -16,7 +16,8 @@
 empty_server_test_() ->
     {setup,
         fun() ->
-            coap_server:start()
+            {ok, Pid} = coap_server:start(),
+            Pid
         end,
         fun(ServerPid) ->
             coap_server:stop(ServerPid)
