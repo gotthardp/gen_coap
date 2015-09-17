@@ -38,21 +38,13 @@ coap_server_content:add_handler(["prefix"], custom_handler, Args)
 ```
 The custom handler should implement one or more callbacks that the server invokes
 upon reception of a CoAP request. All callbacks are optional.
- - `coap_discover(Prefix, Args)` is called when a CoAP client asks for the list of
+ - `coap_discover` is called when a CoAP client asks for the list of
    ".well-known/core" resources. The function shall return a list of resources
    with a given *Prefix*.
- - `coap_get({IP, Port}, Pid, Prefix, Suffix, Request)` is called when the server receives
-   a GET request for a resource *Prefix*/*Suffix*.
- - `coap_subscribe({IP, Port}, Pid, Prefix, Suffix, Request)` is called upon
-   a GET request with an Observe=0 option for a resource *Prefix*/*Suffix*.
- - `coap_unsubscribe({IP, Port}, Pid, Prefix, Suffix, Request)` is called upon
-   a GET request with an Observe=1 option for a resource *Prefix*/*Suffix*.
- - `coap_post({IP, Port}, Pid, Prefix, Suffix, Request)` is called upon
-   a POST request for a resource *Prefix*/*Suffix*.
- - `coap_put({IP, Port}, Pid, Prefix, Suffix, Request)` is called upon
-   a PUT request for a resource *Prefix*/*Suffix*.
- - `coap_delete({IP, Port}, Pid, Prefix, Suffix, Request)` is called upon
-   a DELETE request for a resource *Prefix*/*Suffix*.
+ - `coap_get`, `coap_post`, `coap_put` or `coap_delete` is called when the server
+   receives a GET, POST, PUT or DELETE request for a resource *Prefix*/*Suffix*.
+ - `coap_subscribe` or `coap_unsubscribe` is called upon a GET request with an
+   Observe=0 or Observe=1 option for a resource *Prefix*/*Suffix*.
 
 You can start the server from command line:
 
