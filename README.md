@@ -47,7 +47,7 @@ upon reception of a CoAP request. All callbacks are optional.
    Observe=0 or Observe=1 option for a resource *Prefix*/*Suffix*.
 
 The architecture looks as follows:
-![GitHub Logo](https://cdn.rawgit.com/gotthardp/gen_coap/master/doc/architecture.svg)
+![GitHub Logo](https://rawgit.com/gotthardp/gen_coap/master/doc/architecture.svg)
 
 You can start the server from command line:
 
