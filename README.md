@@ -46,6 +46,9 @@ upon reception of a CoAP request. All callbacks are optional.
  - `coap_subscribe` or `coap_unsubscribe` is called upon a GET request with an
    Observe=0 or Observe=1 option for a resource *Prefix*/*Suffix*.
 
+The architecture looks as follows:
+![GitHub Logo](https://cdn.rawgit.com/gotthardp/gen_coap/master/doc/architecture.svg)
+
 You can start the server from command line:
 
     $ erl -pa ebin
