@@ -18,8 +18,8 @@ ping(Uri) ->
     {PeerIP, PortNo, _Path} = resolve_uri(Uri),
     channel_apply({PeerIP, PortNo},
         fun(Channel) ->
-            {ok, Ref} = coap_request:ping(Channel),
-            case await_response(Channel, Ref) of
+            {ok, Ref} = coap_channel:ping(Channel),
+            case await_response(Channel, [], Ref) of
                 {error, reset} -> ok;
                 _Else -> error
             end
@@ -29,9 +29,10 @@ request(Method, Uri) ->
     {PeerIP, PortNo, Path} = resolve_uri(Uri),
     channel_apply({PeerIP, PortNo},
         fun(Channel) ->
-            {ok, Ref} = coap_request:send(Channel, con, Method, <<>>,
-                uri_path(Path, [])),
-            await_response(Channel, Ref)
+            ROpt = uri_path(Path, []),
+            {ok, Ref} = coap_channel:send(Channel,
+                coap_message:request(con, Method, <<>>, ROpt)),
+            await_response(Channel, ROpt, Ref)
         end).
 
 uri_path([], Acc) ->
@@ -42,22 +43,26 @@ uri_path([$/ | Path], Acc) ->
     [{uri_path, binary:split(list_to_binary(Path), [<<$/>>], [global])}|Acc].
 
 
-await_response(Channel, Ref) ->
-    await_response(Channel, Ref, <<>>).
+await_response(Channel, ROpt, Ref) ->
+    await_response(Channel, ROpt, Ref, <<>>).
 
-await_response(Channel, Ref, Resource) ->
+await_response(Channel, ROpt, Ref, Resource) ->
     receive
         {coap_response, _ChId, Channel, Ref, #coap_message{method=Method, payload= <<>>}} ->
             Method;
         {coap_response, _ChId, Channel, Ref, #coap_message{method={ok, Code}, options=Options, payload=Data}} ->
             case proplists:get_value(block2, Options) of
-                [{Num, true, Size}] ->
+                {Num, true, Size} ->
                     % more blocks follow, ask for more
-                    {ok, Ref2} = coap_request:send(Channel, con, get, <<>>, [{block2, [{Num+1, false, Size}]}]),
-                    await_response(Channel, Ref2, <<Resource/binary, Data/binary>>);
+                    {ok, Ref2} = coap_channel:send(Channel,
+                        coap_message:request(con, get, <<>>, [{block2, {Num+1, false, Size}}|ROpt])),
+                    await_response(Channel, ROpt, Ref2, <<Resource/binary, Data/binary>>);
                 _Else ->
                     % not segmented
-                    {ok, Code, <<Resource/binary, Data/binary>>}
+                    {ok, Code, #coap_resource{
+                        etag = proplists:get_value(etag, Options),
+                        format = proplists:get_value(content_format, Options),
+                        content = <<Resource/binary, Data/binary>>}}
             end;
         {coap_error, _ChId, Channel, Ref, reset} ->
             {error, reset}

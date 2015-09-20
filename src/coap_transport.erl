@@ -11,7 +11,7 @@
 % handles message retransmission and de-duplication
 -module(coap_transport).
 
--export([init/5, received/2, send/2, timeout/2]).
+-export([init/6, received/2, send/2, timeout/2]).
 -export([idle/2, got_non/2, sent_non/2, got_rst/2, await_aack/2, pack_sent/2, await_pack/2, aack_sent/2]).
 
 -define(ACK_TIMEOUT, 2000).
@@ -22,12 +22,12 @@
 -define(EXCHANGE_LIFETIME, 247000).
 -define(NON_LIFETIME, 145000).
 
--record(state, {phase, sock, cid, channel, tid, receiver, msg, timer, retry_time, retry_count}).
+-record(state, {phase, sock, cid, channel, tid, resp, receiver, msg, timer, retry_time, retry_count}).
 
 -include("coap.hrl").
 
-init(Sock, ChId, Channel, TrId, Receiver) ->
-    #state{phase=idle, sock=Sock, cid=ChId, channel=Channel, tid=TrId, receiver=Receiver}.
+init(Sock, ChId, Channel, TrId, ReSup, Receiver) ->
+    #state{phase=idle, sock=Sock, cid=ChId, channel=Channel, tid=TrId, resp=ReSup, receiver=Receiver}.
 % process incoming message
 received(BinMessage, State=#state{phase=Phase}) ->
     ?MODULE:Phase({in, BinMessage}, State).
@@ -60,15 +60,14 @@ idle(Msg={out, #coap_message{type=con}}, State=#state{channel=Channel, tid=TrId}
 
 % --- incoming NON
 
-in_non({in, BinMessage}, State=#state{cid=ChId, channel=Channel, receiver=Receiver}) ->
+in_non({in, BinMessage}, State) ->
     Message = coap_message_parser:decode(BinMessage),
     io:fwrite("=> ~p~n", [Message]),
     case Message of
         #coap_message{method=Method} when is_atom(Method) ->
-            coap_request:handle_request(Receiver, ChId, Channel, Message);
+            handle_request(Message, State);
         #coap_message{} ->
-            coap_request:handle_response(Receiver, ChId, Channel, Message),
-            request_complete(Channel, Message)
+            handle_response(Message, State)
     end,
     next_state(got_non, State).
 
@@ -85,13 +84,12 @@ out_non({out, Message}, State=#state{sock=Sock, cid=ChId}) ->
     next_state(sent_non, State).
 
 % we may get reset
-sent_non({in, BinMessage}, State=#state{cid=ChId, channel=Channel, receiver=Receiver})->
+sent_non({in, BinMessage}, State)->
     Message = coap_message_parser:decode(BinMessage),
     io:fwrite("-> ~p~n", [Message]),
     case Message of
-        #coap_message{type=reset, id=MsgId} ->
-            coap_request:handle_error(Receiver, ChId, Channel, {MsgId, reset}),
-            request_complete(Channel, Message)
+        #coap_message{type=reset} ->
+            handle_error(Message, reset, State)
     end,
     next_state(got_rst, State).
 
@@ -100,18 +98,17 @@ got_rst({in, _BinMessage}, State)->
 
 % --- incoming CON->ACK|RST
 
-in_con({in, BinMessage}, State=#state{cid=ChId, channel=Channel, receiver=Receiver}) ->
+in_con({in, BinMessage}, State=#state{channel=Channel}) ->
     Message = coap_message_parser:decode(BinMessage),
     io:fwrite("=> ~p~n", [Message]),
     case Message of
         #coap_message{method=undefined, id=MsgId} ->
             % provoked reset
-            coap_channel:send_ack(Channel, #coap_message{type=reset, id=MsgId});
+            coap_channel:send(Channel, #coap_message{type=reset, id=MsgId});
         #coap_message{method=Method} when is_atom(Method) ->
-            coap_request:handle_request(Receiver, ChId, Channel, Message);
+            handle_request(Message, State);
         #coap_message{} ->
-            coap_request:handle_response(Receiver, ChId, Channel, Message),
-            request_complete(Channel, Message)
+            handle_response(Message, State)
     end,
     % we may need to ack the message
     BinAck = coap_message_parser:encode(coap_message:response(Message)),
@@ -146,17 +143,16 @@ out_con({out, Message}, State=#state{sock=Sock, cid=ChId}) ->
     next_state(await_pack, State#state{msg=Message, retry_time=Timeout, retry_count=0}, Timeout).
 
 % peer ack
-await_pack({in, BinAck}, State=#state{cid=ChId, channel=Channel, receiver=Receiver}) ->
+await_pack({in, BinAck}, State) ->
     Ack = coap_message_parser:decode(BinAck),
     io:fwrite("-> ~p~n", [Ack]),
     case Ack of
         #coap_message{type=ack, method=undefined} ->
-            coap_request:handle_ack(Receiver, ChId, Channel, Ack);
-        #coap_message{type=reset, id=MsgId} ->
-            coap_request:handle_error(Receiver, ChId, Channel, {MsgId, reset});
+            handle_ack(Ack, State);
+        #coap_message{type=reset} ->
+            handle_error(Ack, reset, State);
         #coap_message{} ->
-            coap_request:handle_response(Receiver, ChId, Channel, Ack),
-            request_complete(Channel, Ack)
+            handle_response(Ack, State)
     end,
     next_state(aack_sent, State);
 await_pack({timeout, await_pack}, State=#state{sock=Sock, cid=ChId, msg=Message, retry_time=Timeout, retry_count=Count}) when Count < ?MAX_RETRANSMIT ->
@@ -164,10 +160,9 @@ await_pack({timeout, await_pack}, State=#state{sock=Sock, cid=ChId, msg=Message,
     Sock ! {datagram, ChId, BinMessage},
     Timeout2 = Timeout*2,
     next_state(await_pack, State#state{retry_time=Timeout2, retry_count=Count+1}, Timeout2);
-await_pack({timeout, await_pack}, State=#state{cid=ChId, channel=Channel, tid={out, MsgId}, receiver=Receiver, msg=Message}) ->
+await_pack({timeout, await_pack}, State=#state{tid={out, MsgId}, msg=Message}) ->
     io:fwrite("-> timeout ~p~n", [MsgId]),
-    coap_request:handle_error(Receiver, ChId, Channel, {MsgId, timeout}),
-    request_complete(Channel, Message),
+    handle_error(Message, timeout, State),
     next_state(aack_sent, State).
 
 aack_sent({in, _Ack}, State) ->
@@ -178,6 +173,28 @@ aack_sent({in, _Ack}, State) ->
 
 timeout_after(Time, Channel, TrId, Event) ->
     erlang:send_after(Time, Channel, {timeout, TrId, Event}).
+
+handle_request(Message, #state{cid=ChId, channel=Channel, resp=ReSup, receiver=undefined}) ->
+    case coap_responder_sup:get_responder(ReSup, Message) of
+        {ok, Pid} ->
+            Pid ! {coap_request, ChId, Channel, undefined, Message};
+        {error, {not_found, _}} ->
+            coap_channel:send(Channel,
+                coap_message:response({error, not_found}, Message))
+    end;
+handle_request(Message, #state{cid=ChId, channel=Channel, receiver={Sender, Ref}}) ->
+    Sender ! {coap_request, ChId, Channel, Ref, Message}.
+
+handle_response(Message, #state{cid=ChId, channel=Channel, receiver={Sender, Ref}}) ->
+    Sender ! {coap_response, ChId, Channel, Ref, Message},
+    request_complete(Channel, Message).
+
+handle_error(Message=#coap_message{id=MsgId}, Error, #state{cid=ChId, channel=Channel, receiver={Sender, Ref}}) ->
+    Sender ! {coap_error, ChId, Channel, Ref, Error},
+    request_complete(Channel, Message).
+
+handle_ack(_Message, #state{cid=ChId, channel=Channel, receiver={Sender, Ref}}) ->
+    Sender ! {coap_ack, ChId, Channel, Ref}.
 
 request_complete(Channel, #coap_message{token=Token, options=Options}) ->
     case proplists:get_value(observe, Options, []) of

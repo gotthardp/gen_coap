@@ -12,41 +12,47 @@
 -module(coap_channel).
 -behaviour(gen_server).
 
--export([start_link/4, close/1]).
+-export([start_link/4]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
--export([send_request/2, send_request/3, send_message/2, send_message/3, send_ack/2]).
+-export([ping/1, send/2, close/1]).
 
 -define(VERSION, 1).
 -define(MAX_MESSAGE_ID, 65535). % 16-bit number
 
--record(state, {sup, sock, cid, tokens, trans, nextmid, obs}).
+-record(state, {sup, sock, cid, tokens, trans, nextmid, res, rescnt}).
 
 -include("coap.hrl").
 
-start_link(SupPid, SockPid, ChId, ObsPid) ->
-    gen_server:start_link(?MODULE, [SupPid, SockPid, ChId, ObsPid], []).
+start_link(SupPid, SockPid, ChId, ReSup) ->
+    gen_server:start_link(?MODULE, [SupPid, SockPid, ChId, ReSup], []).
 
-close(Pid) ->
-    gen_server:cast(Pid, shutdown).
+ping(Channel) ->
+    send_message(Channel, #coap_message{type=con}, make_ref()).
 
-send_request(Pid, Message) ->
-    send_request(Pid, Message, make_ref()).
+send(Channel, Message=#coap_message{type=Type}) when Type==ack; Type==reset ->
+    send_ack(Channel, Message);
+send(Channel, Message=#coap_message{method=Method}) when is_atom(Method) ->
+    send_request(Channel, Message, make_ref());
+send(Channel, Message=#coap_message{}) ->
+    send_message(Channel, Message, make_ref()).
+
 send_request(Pid, Message, Ref) ->
     gen_server:cast(Pid, {send_request, Message, {self(), Ref}}),
     {ok, Ref}.
-send_message(Pid, Message) ->
-    send_message(Pid, Message, make_ref()).
 send_message(Pid, Message, Ref) ->
     gen_server:cast(Pid, {send_message, Message, {self(), Ref}}),
     {ok, Ref}.
 send_ack(Pid, Message) ->
     gen_server:cast(Pid, {send_ack, Message}).
 
-init([SupPid, SockPid, ChId, ObsPid]) ->
+close(Pid) ->
+    gen_server:cast(Pid, shutdown).
+
+init([SupPid, SockPid, ChId, ReSup]) ->
     % we want to get called upon termination
     process_flag(trap_exit, true),
     {ok, #state{sup=SupPid, sock=SockPid, cid=ChId, tokens=dict:new(),
-        trans=dict:new(), nextmid=first_mid(), obs=ObsPid}}.
+        trans=dict:new(), nextmid=first_mid(), res=ReSup, rescnt=0}}.
 
 handle_call(_Unknown, _From, State) ->
     {reply, unknown_call, State}.
@@ -130,6 +136,10 @@ handle_info({timeout, TrId, Event}, State=#state{trans=Trans}) ->
 handle_info({request_complete, Token}, State=#state{tokens=Tokens}) ->
     Tokens2 = dict:erase(Token, Tokens),
     purge_state(State#state{tokens=Tokens2});
+handle_info({responder_started}, State=#state{rescnt=Count}) ->
+    purge_state(State#state{rescnt=Count+1});
+handle_info({responder_completed}, State=#state{rescnt=Count}) ->
+    purge_state(State#state{rescnt=Count-1});
 handle_info(Info, State) ->
     io:fwrite("unexpected massage ~p~n", [Info]),
     {noreply, State}.
@@ -159,8 +169,10 @@ create_transport(TrId, Receiver, State=#state{trans=Trans}) ->
         error -> init_transport(TrId, Receiver, State)
     end.
 
+init_transport(TrId, undefined, #state{sock=Sock, cid=ChId, res=ReSup}) ->
+    coap_transport:init(Sock, ChId, self(), TrId, ReSup, undefined);
 init_transport(TrId, Receiver, #state{sock=Sock, cid=ChId}) ->
-    coap_transport:init(Sock, ChId, self(), TrId, Receiver).
+    coap_transport:init(Sock, ChId, self(), TrId, undefined, Receiver).
 
 update_state(State=#state{trans=Trans}, TrId, undefined) ->
     Trans2 = dict:erase(TrId, Trans),
@@ -169,9 +181,9 @@ update_state(State=#state{trans=Trans}, TrId, TrState) ->
     Trans2 = dict:store(TrId, TrState, Trans),
     {noreply, State#state{trans=Trans2}}.
 
-purge_state(State=#state{tokens=Tokens, trans=Trans}) ->
-    case dict:size(Tokens)+dict:size(Trans) of
-        N when N == 0 -> {stop, normal, State};
+purge_state(State=#state{tokens=Tokens, trans=Trans, rescnt=Count}) ->
+    case dict:size(Tokens)+dict:size(Trans)+Count of
+        0 -> {stop, normal, State};
         _Else -> {noreply, State}
     end.
 

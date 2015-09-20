@@ -104,10 +104,8 @@ decode_option_list(Tail) ->
 
 decode_option_list(<<>>, _LastNum, OptionList) ->
     {OptionList, <<>>};
-
 decode_option_list(<<16#FF, Payload/bytes>>, _LastNum, OptionList) ->
     {OptionList, Payload};
-
 decode_option_list(<<Delta:4, Len:4, Tail/bytes>>, LastNum, OptionList) ->
     {Tail1, OptNum} = if
         Delta < 13 ->
@@ -137,8 +135,18 @@ decode_option_list(<<Delta:4, Len:4, Tail/bytes>>, LastNum, OptionList) ->
     end.
 
 % put options of the same id into one list
-append_option({SameOptId, OptVal2}, [{SameOptId, OptVal1} | OptionList]) -> [{SameOptId, OptVal1++[OptVal2]} | OptionList];
-append_option({OptId2, OptVal2}, OptionList) -> [{OptId2, [OptVal2]} | OptionList].
+append_option({SameOptId, OptVal2}, [{SameOptId, OptVal1} | OptionList]) ->
+    case is_repeatable_option(SameOptId) of
+        true ->
+            % we must keep the order
+            [{SameOptId, OptVal1++[OptVal2]} | OptionList]
+        % false -> crash
+    end;
+append_option({OptId2, OptVal2}, OptionList) ->
+    case is_repeatable_option(OptId2) of
+        true -> [{OptId2, [OptVal2]} | OptionList];
+        false -> [{OptId2, OptVal2} | OptionList]
+    end.
 
 encode_option_list(Options, <<>>) ->
     encode_option_list1(Options);
@@ -146,19 +154,30 @@ encode_option_list(Options, Payload) ->
     <<(encode_option_list1(Options))/bytes, 16#FF, Payload/bytes>>.
 
 encode_option_list1(Options) ->
-    Options1 = lists:foldl(
-        fun(Option, Acc) -> split_and_encode_option(Option)++Acc end,
-        [], Options),
+    Options1 = encode_options(Options, []),
     % sort before encoding so we can calculate the deltas
     % the sort is stable; it maintains relative order of values with equal keys
     encode_option_list(lists:keysort(1, Options1), 0, <<>>).
 
-split_and_encode_option({OptId, [undefined | OptVals]}) ->
-    split_and_encode_option({OptId, OptVals});
-split_and_encode_option({OptId, [OptVal1 | OptVals]}) ->
-    [encode_option({OptId, OptVal1}) | split_and_encode_option({OptId, OptVals})];
-split_and_encode_option({_OptId, []}) ->
-    [].
+encode_options([{_OptId, undefined} | OptionList], Acc) ->
+    encode_options(OptionList, Acc);
+encode_options([{OptId, OptVal} | OptionList], Acc) ->
+    case is_repeatable_option(OptId) of
+        true ->
+            encode_options(OptionList, split_and_encode_option({OptId, OptVal}, Acc));
+        false ->
+            encode_options(OptionList, [encode_option({OptId, OptVal}) | Acc])
+    end;
+encode_options([], Acc) ->
+    Acc.
+
+split_and_encode_option({OptId, [undefined | OptVals]}, Acc) ->
+    split_and_encode_option({OptId, OptVals}, Acc);
+split_and_encode_option({OptId, [OptVal1 | OptVals]}, Acc) ->
+    % we must keep the order
+    [encode_option({OptId, OptVal1}) | split_and_encode_option({OptId, OptVals}, Acc)];
+split_and_encode_option({_OptId, []}, Acc) ->
+    Acc.
 
 encode_option_list([{OptNum, OptVal} | OptionList], LastNum, Acc) ->
     {Delta, ExtNum} = if
@@ -182,6 +201,14 @@ encode_option_list([{OptNum, OptVal} | OptionList], LastNum, Acc) ->
 
 encode_option_list([], _LastNum, Acc) ->
     Acc.
+
+is_repeatable_option(if_match) -> true;
+is_repeatable_option(etag) -> true;
+is_repeatable_option(location_path) -> true;
+is_repeatable_option(uri_path) -> true;
+is_repeatable_option(uri_query) -> true;
+is_repeatable_option(location_query) -> true;
+is_repeatable_option(_Else) -> false.
 
 % RFC 7252
 decode_option(?OPTION_ETAG, OptVal) -> {etag, OptVal};
@@ -247,11 +274,11 @@ log2(X) -> math:log(X) / math:log(2).
 codec_test_()-> [
     test_codec(#coap_message{type=reset, id=0, options=[]}),
     test_codec(#coap_message{type=con, method=get, id=100,
-        options=[{block1, [{0,true,128}]}, {observe, [1]}]}),
+        options=[{block1, {0,true,128}}, {observe, 1}]}),
     test_codec(#coap_message{type=non, method=put, id=200, token= <<"token">>,
         options=[{uri_path,[<<".well-known">>, <<"core">>]}]}),
-    test_codec(#coap_message{type=non, method={ok, 'content'}, id=200, token= <<"token">>,
-        payload= <<"<url>">>, options=[{content_format, [<<"application/link-format">>]}, {uri_path,[<<".well-known">>, <<"core">>]}]})].
+    test_codec(#coap_message{type=non, method={ok, 'content'}, id=300, token= <<"token">>,
+        payload= <<"<url>">>, options=[{content_format, <<"application/link-format">>}, {uri_path,[<<".well-known">>, <<"core">>]}]})].
 
 test_codec(Message) ->
     Message2 = encode(Message),

@@ -8,7 +8,7 @@
 %
 
 % tests per ETSI CoAP test specifications (and few more)
--module(etsi_coap_tests).
+-module(empty_server_tests).
 
 -include_lib("eunit/include/eunit.hrl").
 
