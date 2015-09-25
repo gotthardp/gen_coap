@@ -38,4 +38,23 @@ empty_server(_State) ->
     ?_assertEqual({error,method_not_allowed}, coap_client:request(delete, "coap://127.0.0.1/.well-known/core"))
     ].
 
+
+unknown_handler_test_() ->
+    {setup,
+        fun() ->
+            application:start(gen_coap),
+            coap_server_content:add_handler([<<"unknown">>], unknown_module, undefined)
+        end,
+        fun(_State) ->
+            application:stop(gen_coap)
+        end,
+        fun unknown_handler/1}.
+
+unknown_handler(_State) ->
+    [
+    % provoked reset
+    ?_assertEqual({ok, content}, coap_client:request(get, "coap://127.0.0.1/.well-known/core")),
+    ?_assertEqual({error,service_unavailable}, coap_client:request(get, "coap://127.0.0.1/unknown"))
+    ].
+
 % end of file
