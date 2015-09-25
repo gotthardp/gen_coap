@@ -11,11 +11,9 @@
 -module(coap_message).
 
 -export([request/2, request/3, request/4, response/1, response/2, response/3]).
--export([set/3, set_payload/2, set_resource/3]).
+-export([set/3, set_payload/2, set_resource/2, set_resource/3]).
 
 -include("coap.hrl").
-
--define(MAX_BLOCK_SIZE, 1024).
 
 request(Type, Method) ->
     request(Type, Method, <<>>, []).
@@ -23,8 +21,11 @@ request(Type, Method) ->
 request(Type, Method, Payload) ->
     request(Type, Method, Payload, []).
 
-request(Type, Method, Payload, Options) ->
-    #coap_message{type=Type, method=Method, payload=Payload, options=Options}.
+request(Type, Method, Payload, Options) when is_binary(Payload) ->
+    #coap_message{type=Type, method=Method, payload=Payload, options=Options};
+request(Type, Method, Resource=#coap_resource{}, Options) ->
+    set_resource(Resource,
+        #coap_message{type=Type, method=Method, options=Options}).
 
 
 response(Request=#coap_message{type=non}) ->
@@ -72,6 +73,9 @@ set_payload(Payload, Msg) when is_list(Payload) ->
         payload=list_to_binary(Payload)
     }.
 
+set_resource(Resource, Msg) ->
+    set_resource(Resource, undefined, Msg).
+
 % segmentation not requested and not required
 set_resource(#coap_resource{etag=ETag, format=Format, content=Content}, undefined, Msg)
         when byte_size(Content) =< ?MAX_BLOCK_SIZE ->
@@ -80,18 +84,23 @@ set_resource(#coap_resource{etag=ETag, format=Format, content=Content}, undefine
             set_payload(Content, Msg)));
 % segmentation not requested, but required (late negotiation)
 set_resource(Resource, undefined, Msg) ->
-    set_resource(Resource, {0, 0, ?MAX_BLOCK_SIZE}, Msg);
+    set_resource(Resource, {0, true, ?MAX_BLOCK_SIZE}, Msg);
 % segmentation requested (early negotiation)
 set_resource(#coap_resource{etag=ETag, format=Format, content=Content}, Block, Msg) ->
     set(etag, [ETag],
         set(content_format, Format,
             set_payload_block(Content, Block, Msg))).
 
-set_payload_block(Content, {Num, _, Size}, Msg) when byte_size(Content) > (Num+1)*Size ->
-    set(block2, {Num, true, Size},
+set_payload_block(Content, Block, Msg=#coap_message{method=Method}) when is_atom(Method) ->
+    set_payload_block(Content, block1, Block, Msg);
+set_payload_block(Content, Block, Msg=#coap_message{}) ->
+    set_payload_block(Content, block2, Block, Msg).
+
+set_payload_block(Content, BlockId, {Num, _, Size}, Msg) when byte_size(Content) > (Num+1)*Size ->
+    set(BlockId, {Num, true, Size},
         set_payload(binary:part(Content, Num*Size, Size), Msg));
-set_payload_block(Content, {Num, _, Size}, Msg) ->
-    set(block2, {Num, false, Size},
+set_payload_block(Content, BlockId, {Num, _, Size}, Msg) ->
+    set(BlockId, {Num, false, Size},
         set_payload(binary:part(Content, Num*Size, byte_size(Content)-Num*Size), Msg)).
 
 % end of file

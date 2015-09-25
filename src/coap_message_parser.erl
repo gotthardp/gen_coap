@@ -78,6 +78,7 @@ methods() -> [
     {{2,03}, {ok, valid}},
     {{2,04}, {ok, changed}},
     {{2,05}, {ok, content}},
+    {{2,31}, {ok, continue}}, % block
     % error is a tuple {error, ...}
     {{4,00}, {error, bad_request}},
     {{4,01}, {error, uauthorized}},
@@ -86,6 +87,7 @@ methods() -> [
     {{4,04}, {error, not_found}},
     {{4,05}, {error, method_not_allowed}},
     {{4,06}, {error, not_acceptable}},
+    {{4,08}, {error, request_entity_incomplete}}, % block
     {{4,12}, {error, precondition_failed}},
     {{4,13}, {error, request_entity_too_large}},
     {{4,15}, {error, unsupported_content_format}},

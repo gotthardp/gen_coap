@@ -17,9 +17,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
     terminate/2, code_change/3]).
 
--record(state, {channel, prefix, module, args, cached, timer}).
+-record(state, {channel, prefix, module, args, segs, cached, timer}).
 
--define(MAX_BLOCK_SIZE, 1024).
 -define(EXCHANGE_LIFETIME, 247000).
 
 start_link(Channel, Uri) ->
@@ -33,7 +32,7 @@ init([Channel, Uri]) ->
     case coap_server_content:get_handler(Uri) of
         {Prefix, Module, Args} ->
             Channel ! {responder_started},
-            {ok, #state{channel=Channel, prefix=Prefix, module=Module, args=Args}};
+            {ok, #state{channel=Channel, prefix=Prefix, module=Module, args=Args, segs=orddict:new()}};
         undefined ->
             {stop, not_found}
     end.
@@ -71,7 +70,35 @@ code_change(_OldVsn, State, _Extra) ->
 
 % handlers
 
-handle(ChId, Channel, Request=#coap_message{method='get', options=Options}, State) ->
+handle(ChId, Channel, Request=#coap_message{options=Options}, State) ->
+    Block1 = proplists:get_value(block1, Options),
+    case assemble_payload(Request, Block1, State) of
+        {continue, State2} ->
+            coap_channel:send(Channel,
+                coap_message:set(block1, Block1,
+                    coap_message:response({ok, continue}, Request))),
+            {cache, ?EXCHANGE_LIFETIME, State2};
+        {ok, Payload, State2} ->
+            handle_method(ChId, Channel, Request, State)
+    end.
+
+assemble_payload(Request=#coap_message{payload=Payload}, undefined, State) ->
+    {ok, Payload, State};
+assemble_payload(Request=#coap_message{payload=Segment}, {Num, true, Size}, State=#state{segs=Segs}) ->
+    case byte_size(Segment) of
+        Size -> {continue, State#state{segs=orddict:store(Num, Segment, Segs)}};
+        _Else -> throw({error, bad_request})
+    end;
+assemble_payload(Request=#coap_message{payload=Segment}, {Num, false, Size}, State=#state{segs=Segs}) ->
+    Payload = lists:foldl(
+        fun ({Num, Segment}, Acc) when Num*byte_size(Segment) == byte_size(Acc) ->
+                <<Acc/binary, Segment/binary>>;
+            (_Else, _Acc) ->
+                throw({error, request_entity_incomplete})
+        end, <<>>, orddict:to_list(Segs)),
+    {ok, <<Payload/binary, Segment/binary>>, State#state{segs=orddict:new()}}.
+
+handle_method(ChId, Channel, Request=#coap_message{method='get', options=Options}, State) ->
     case proplists:get_value(observe, Options) of
 %        [0] ->
 %            handle_subscribe(Module, ChId, Channel, Prefix, Suffix, Message);
@@ -82,7 +109,13 @@ handle(ChId, Channel, Request=#coap_message{method='get', options=Options}, Stat
             get_resource(ChId, Channel, Request, State);
         _Else -> {stop, {error, bad_option}}
     end;
-handle(_ChId, _Channel, _Request, _State) ->
+handle_method(ChId, Channel, Request=#coap_message{method='post', options=Options}, State) ->
+    throw({error, method_not_allowed});
+handle_method(ChId, Channel, Request=#coap_message{method='put', options=Options}, State) ->
+    throw({error, method_not_allowed});
+handle_method(ChId, Channel, Request=#coap_message{method='delete', options=Options}, State) ->
+    throw({error, method_not_allowed});
+handle_method(_ChId, _Channel, _Request, _State) ->
     throw({error, method_not_allowed}).
 
 cache_invalid(#coap_message{options=Options}, #state{cached=#coap_resource{etag=ETag}}) ->

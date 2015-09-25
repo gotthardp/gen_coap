@@ -11,6 +11,7 @@
 -module(empty_server_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("gen_coap/include/coap.hrl").
 
 % fixture is my friend
 empty_server_test_() ->
@@ -31,7 +32,7 @@ empty_server(_State) ->
     ?_assertEqual({error, not_found}, coap_client:request(get, "coap://127.0.0.1")),
     ?_assertEqual({error, not_found}, coap_client:request(get, "coap://127.0.0.1/")),
     ?_assertEqual({error, not_found}, coap_client:request(get, "coap://127.0.0.1/.well-known")),
-    ?_assertEqual({ok, content}, coap_client:request(get, "coap://127.0.0.1/.well-known/core")),
+    ?_assertMatch({ok, content, #coap_resource{content= <<>>}}, coap_client:request(get, "coap://127.0.0.1/.well-known/core")),
     % other methods
     ?_assertEqual({error,method_not_allowed}, coap_client:request(post, "coap://127.0.0.1/.well-known/core")),
     ?_assertEqual({error,method_not_allowed}, coap_client:request(put, "coap://127.0.0.1/.well-known/core")),
@@ -53,7 +54,7 @@ unknown_handler_test_() ->
 unknown_handler(_State) ->
     [
     % provoked reset
-    ?_assertEqual({ok, content}, coap_client:request(get, "coap://127.0.0.1/.well-known/core")),
+    ?_assertMatch({ok, content, #coap_resource{content= <<>>}}, coap_client:request(get, "coap://127.0.0.1/.well-known/core")),
     ?_assertEqual({error,service_unavailable}, coap_client:request(get, "coap://127.0.0.1/unknown"))
     ].
 

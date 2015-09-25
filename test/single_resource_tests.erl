@@ -43,7 +43,9 @@ single_resource(_State) ->
     ?_assertEqual({ok,content,text_resource(128)}, coap_client:request(get, "coap://127.0.0.1/text/128")),
     ?_assertEqual({ok,content,text_resource(1024)}, coap_client:request(get, "coap://127.0.0.1/text/1024")),
     ?_assertEqual({ok,content,text_resource(1984)}, coap_client:request(get, "coap://127.0.0.1/text/1984")),
-    ?_assertEqual({error,method_not_allowed}, coap_client:request(post, "coap://127.0.0.1/text")),
+    ?_assertEqual({error,method_not_allowed}, coap_client:request(post, "coap://127.0.0.1/text", text_resource(128))),
+    ?_assertEqual({error,method_not_allowed}, coap_client:request(post, "coap://127.0.0.1/text", text_resource(1024))),
+    ?_assertEqual({error,method_not_allowed}, coap_client:request(post, "coap://127.0.0.1/text", text_resource(1984))),
     ?_assertEqual({error,method_not_allowed}, coap_client:request(put, "coap://127.0.0.1/text")),
     ?_assertEqual({error,method_not_allowed}, coap_client:request(delete, "coap://127.0.0.1/text"))
     ].

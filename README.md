@@ -8,7 +8,7 @@ which aims to be conformant with:
  - CoRE link format [RFC 6690](https://tools.ietf.org/rfc/rfc6690.txt)
 
 Tested with the following CoAP implementations:
- - C [libcoap](https://www.libcoap.net/)
+ - C [libcoap](https://www.libcoap.net/) (develop branch)
  - [coap.me](http://coap.me/)
 
 Used in the following applications:
