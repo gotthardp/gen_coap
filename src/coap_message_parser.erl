@@ -17,7 +17,9 @@
 
 -define(VERSION, 1).
 
+-define(OPTION_IF_MATCH, 1).
 -define(OPTION_ETAG, 4).
+-define(OPTION_IF_NONE_MATCH, 5).
 -define(OPTION_OBSERVE, 6). % draft-ietf-core-observe-16
 -define(OPTION_URI_PATH, 11).
 -define(OPTION_URI_QUERY, 15).
@@ -213,7 +215,9 @@ is_repeatable_option(location_query) -> true;
 is_repeatable_option(_Else) -> false.
 
 % RFC 7252
+decode_option(?OPTION_IF_MATCH, OptVal) -> {if_match, OptVal};
 decode_option(?OPTION_ETAG, OptVal) -> {etag, OptVal};
+decode_option(?OPTION_IF_NONE_MATCH, <<>>) -> {if_none_match, true};
 decode_option(?OPTION_URI_PATH, OptVal) -> {uri_path, OptVal};
 decode_option(?OPTION_CONTENT_FORMAT, OptVal) ->
     Num = binary:decode_unsigned(OptVal),
@@ -238,7 +242,9 @@ decode_block1(Num, M, SizEx) ->
 
 
 % RFC 7252
+encode_option({if_match, OptVal}) -> {?OPTION_IF_MATCH, OptVal};
 encode_option({etag, OptVal}) -> {?OPTION_ETAG, OptVal};
+encode_option({if_none_match, true}) -> {?OPTION_IF_NONE_MATCH, <<>>};
 encode_option({uri_path, OptVal}) -> {?OPTION_URI_PATH, OptVal};
 encode_option({content_format, OptVal}) when is_integer(OptVal) ->
     {?OPTION_CONTENT_FORMAT, binary:encode_unsigned(OptVal)};

@@ -11,7 +11,7 @@
 -module(coap_message).
 
 -export([request/2, request/3, request/4, response/1, response/2, response/3]).
--export([set/3, set_payload/2, set_content/2, set_content/3]).
+-export([set/3, set_payload/2, get_content/1, set_content/2, set_content/3]).
 
 -include("coap.hrl").
 
@@ -49,11 +49,6 @@ response(Method, Payload, Request) ->
         set_payload(Payload,
             response(Request))).
 
-
-set(_Option, undefined, Msg) ->
-    Msg;
-set(_Option, [undefined], Msg) ->
-    Msg;
 set(Option, Value, Msg=#coap_message{options=Options}) ->
     Msg#coap_message{
         options=[{Option, Value}|Options]
@@ -74,6 +69,15 @@ set_payload(Payload, Msg) when is_list(Payload) ->
     Msg#coap_message{
         payload=list_to_binary(Payload)
     }.
+
+get_content(#coap_message{options=Options, payload=Payload}) ->
+    #coap_content{
+        etag = case proplists:get_value(etag, Options) of
+                   [ETag] -> ETag;
+                   _Other -> undefined
+               end,
+        format = proplists:get_value(content_format, Options),
+        payload = Payload}.
 
 set_content(Content, Msg) ->
     set_content(Content, undefined, Msg).

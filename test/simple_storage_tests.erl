@@ -9,7 +9,7 @@
 
 -module(simple_storage_tests).
 
--export([coap_discover/2, coap_get/5, coap_delete/5]).
+-export([coap_discover/2, coap_get/4, coap_put/4, coap_delete/4]).
 -export([do_storage/0]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -19,10 +19,13 @@ coap_discover(Prefix, _Args) ->
     [{absolute, Prefix, []}].
 
 % resource generator
-coap_get(_ChId, _Prefix, [Name], _Request, _Payload) ->
+coap_get(_ChId, _Prefix, [Name], _Request) ->
     send_command({get, Name}).
 
-coap_delete(_ChId, _Prefix, [Name], _Request, _Payload) ->
+coap_put(_ChId, _Prefix, [Name], Request) ->
+    send_command({put, Name, coap_message:get_content(Request)}).
+
+coap_delete(_ChId, _Prefix, [Name], _Request) ->
     send_command({delete, Name}).
 
 send_command(Command) ->
@@ -34,17 +37,13 @@ send_command(Command) ->
 % simple storage
 handle({get, Name}) ->
     case ets:lookup(resources, Name) of
-        [Resource] -> {ok, Resource};
+        [{Name, Resource}] -> {ok, Resource};
         [] -> {error, not_found}
     end;
 
 handle({put, Name, Resource}) ->
-    Before = ets:lookup(resources, Name),
     ets:insert(resources, {Name, Resource}),
-    case Before of
-        [] -> {ok, created};
-        [_OldResource] -> {ok, chaned}
-    end;
+    ok;
 
 handle({delete, Name}) ->
     true = ets:delete(resources, Name),
@@ -80,8 +79,47 @@ simple_storage_test_() ->
 
 simple_storage_test(_State) ->
     [
-    ?_assertEqual({ok, deleted, #coap_content{}}, coap_client:request(delete, "coap://127.0.0.1/storage/one")),
-    ?_assertEqual({error, not_found}, coap_client:request(get, "coap://127.0.0.1/storage/one"))
+    ?_assertEqual({ok, deleted, #coap_content{}},
+        coap_client:request(delete, "coap://127.0.0.1/storage/one")),
+
+    ?_assertEqual({error, not_found},
+        coap_client:request(get, "coap://127.0.0.1/storage/one")),
+
+    ?_assertEqual({ok, created, #coap_content{}},
+        coap_client:request(put, "coap://127.0.0.1/storage/one",
+            #coap_content{etag= <<"1">>, payload= <<"1">>}, [{if_none_match, true}])),
+
+    ?_assertEqual({error,precondition_failed},
+        coap_client:request(put, "coap://127.0.0.1/storage/one",
+            #coap_content{etag= <<"1">>, payload= <<"1">>}, [{if_none_match, true}])),
+
+    ?_assertEqual({ok, content, #coap_content{etag= <<"1">>, payload= <<"1">>}},
+        coap_client:request(get, "coap://127.0.0.1/storage/one")),
+
+    ?_assertEqual({ok, valid, #coap_content{}},
+        coap_client:request(get, "coap://127.0.0.1/storage/one",
+            #coap_content{}, [{etag, [<<"1">>]}])),
+
+    ?_assertEqual({ok, changed, #coap_content{}},
+        coap_client:request(put, "coap://127.0.0.1/storage/one",
+            #coap_content{etag= <<"2">>, payload= <<"2">>})),
+
+    ?_assertEqual({ok, content, #coap_content{etag= <<"2">>, payload= <<"2">>}},
+        coap_client:request(get, "coap://127.0.0.1/storage/one")),
+
+    ?_assertEqual({ok, content, #coap_content{etag= <<"2">>, payload= <<"2">>}},
+        coap_client:request(get, "coap://127.0.0.1/storage/one",
+            #coap_content{}, [{etag, [<<"1">>]}])),
+
+    ?_assertEqual({ok, valid, #coap_content{}},
+        coap_client:request(get, "coap://127.0.0.1/storage/one",
+            #coap_content{}, [{etag, [<<"1">>, <<"2">>]}])),
+
+    ?_assertEqual({ok, deleted, #coap_content{}},
+        coap_client:request(delete, "coap://127.0.0.1/storage/one")),
+
+    ?_assertEqual({error, not_found},
+        coap_client:request(get, "coap://127.0.0.1/storage/one"))
     ].
 
 % end of file

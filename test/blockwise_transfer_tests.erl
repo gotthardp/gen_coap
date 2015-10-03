@@ -9,7 +9,7 @@
 
 -module(blockwise_transfer_tests).
 
--export([coap_discover/2, coap_get/5]).
+-export([coap_discover/2, coap_get/4]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("gen_coap/include/coap.hrl").
@@ -18,7 +18,7 @@ coap_discover(Prefix, _Args) ->
     [{absolute, Prefix, []}].
 
 % resource generator
-coap_get(_ChId, _Prefix, [Size], _Request, _Payload) ->
+coap_get(_ChId, _Prefix, [Size], _Request) ->
     {ok, text_resource(binary_to_integer(Size))}.
 
 text_resource(Size) ->

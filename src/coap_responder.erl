@@ -17,7 +17,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
     terminate/2, code_change/3]).
 
--record(state, {channel, prefix, module, args, segs, cached, timer}).
+-record(state, {channel, prefix, module, args, segs, resource, timer}).
 
 -define(EXCHANGE_LIFETIME, 247000).
 
@@ -79,7 +79,7 @@ handle(ChId, Channel, Request=#coap_message{options=Options}, State) ->
                     coap_message:response({ok, continue}, Request))),
             {cache, ?EXCHANGE_LIFETIME, State2};
         {ok, Payload, State2} ->
-            handle_method(ChId, Channel, Request, Payload, State)
+            check_resource(ChId, Channel, Request#coap_message{payload=Payload}, State2)
     end.
 
 assemble_payload(Request=#coap_message{payload=Payload}, undefined, State) ->
@@ -98,7 +98,46 @@ assemble_payload(Request=#coap_message{payload=Segment}, {Num, false, Size}, Sta
         end, <<>>, orddict:to_list(Segs)),
     {ok, <<Payload/binary, Segment/binary>>, State#state{segs=orddict:new()}}.
 
-handle_method(ChId, Channel, Request=#coap_message{method='get', options=Options}, Payload, State) ->
+check_resource(ChId, Channel, Request=#coap_message{options=Options},
+        State=#state{prefix=Prefix, module=Module, resource=undefined}) ->
+    Resource = invoke_callback(Module, coap_get, [ChId, Prefix, uri_suffix(Prefix, Request), Request]),
+    check_preconditions(ChId, Channel, Request, State#state{resource=Resource});
+check_resource(ChId, Channel, Request=#coap_message{options=Options},
+        State=#state{resource=Resource}) ->
+    check_preconditions(ChId, Channel, Request, State).
+
+check_preconditions(ChId, Channel, Request, State) ->
+    ok = if_match(Request, State),
+    ok = if_none_match(Request, State),
+    handle_method(ChId, Channel, Request, State).
+
+if_match(#coap_message{options=Options}, #state{resource={ok, #coap_content{etag=ETag}}}) ->
+    case proplists:get_value(if_match, Options, []) of
+        % empty string matches any existing representation
+        [] ->
+            ok;
+        % match exact resources
+        List when is_list(List) ->
+            case lists:member(ETag, List) of
+                true -> ok;
+                false -> throw({error, precondition_failed})
+            end
+    end;
+if_match(#coap_message{options=Options}, #state{resource={error, _}}) ->
+    case proplists:is_defined(if_match, Options) of
+        true -> throw({error, precondition_failed});
+        false -> ok
+    end.
+
+if_none_match(#coap_message{options=Options}, #state{resource={ok, _}}) ->
+    case proplists:is_defined(if_none_match, Options) of
+        true -> throw({error, precondition_failed});
+        false -> ok
+    end;
+if_none_match(#coap_message{options=Options}, #state{resource={error, _}}) ->
+    ok.
+
+handle_method(ChId, Channel, Request=#coap_message{method='get', options=Options}, State) ->
     case proplists:get_value(observe, Options) of
 %        [0] ->
 %            handle_subscribe(Module, ChId, Channel, Prefix, Suffix, Message);
@@ -106,19 +145,19 @@ handle_method(ChId, Channel, Request=#coap_message{method='get', options=Options
 %            handle0(Module, [coap_unsubscribe, coap_get], ChId, Channel, Prefix, Suffix, Message);
         undefined ->
             ok = cache_invalid(Request, State),
-            get_resource(ChId, Channel, Request, Payload, State);
+            handle_get(ChId, Channel, Request, State);
         _Else -> {stop, {error, bad_option}}
     end;
-handle_method(ChId, Channel, Request=#coap_message{method='post', options=Options}, Payload, State) ->
+handle_method(ChId, Channel, Request=#coap_message{method='post', options=Options}, State) ->
     throw({error, method_not_allowed});
-handle_method(ChId, Channel, Request=#coap_message{method='put', options=Options}, Payload, State) ->
-    throw({error, method_not_allowed});
-handle_method(ChId, Channel, Request=#coap_message{method='delete', options=Options}, Payload, State) ->
-    delete_resource(ChId, Channel, Request, Payload, State);
-handle_method(_ChId, _Channel, _Request, _Payload, _State) ->
+handle_method(ChId, Channel, Request=#coap_message{method='put', options=Options}, State) ->
+    put_resource(ChId, Channel, Request, State);
+handle_method(ChId, Channel, Request=#coap_message{method='delete', options=Options}, State) ->
+    delete_resource(ChId, Channel, Request, State);
+handle_method(_ChId, _Channel, _Request, _State) ->
     throw({error, method_not_allowed}).
 
-cache_invalid(#coap_message{options=Options}, #state{cached=#coap_content{etag=ETag}}) ->
+cache_invalid(#coap_message{options=Options}, #state{resource={ok, #coap_content{etag=ETag}}}) ->
     case lists:member(ETag, proplists:get_value(etag, Options, [])) of
         true -> throw({ok, valid});
         false -> ok
@@ -126,16 +165,26 @@ cache_invalid(#coap_message{options=Options}, #state{cached=#coap_content{etag=E
 cache_invalid(_Message, _State) ->
     ok.
 
-get_resource(ChId, Channel, Request, Payload, State=#state{prefix=Prefix, module=Module}) ->
-    case invoke_callback(Module, coap_get, [ChId, Prefix, uri_suffix(Prefix, Request), Request, Payload]) of
-        {ok, Resource=#coap_content{}} ->
-            send_response(Channel, Request, {ok, content}, Resource, State#state{cached=Resource});
+handle_get(ChId, Channel, Request, State=#state{resource={ok, Resource}}) ->
+    send_response(Channel, Request, {ok, content}, Resource, State);
+handle_get(ChId, Channel, Request, State=#state{resource={error, Error}}) ->
+    throw({error, Error}).
+
+put_resource(ChId, Channel, Request, State=#state{prefix=Prefix, module=Module, resource=Resource}) ->
+    case invoke_callback(Module, coap_put, [ChId, Prefix, uri_suffix(Prefix, Request), Request]) of
+        ok ->
+            send_response(Channel, Request, created_or_changed(State), #coap_content{}, State);
         {error, Error} ->
             throw({error, Error})
     end.
 
-delete_resource(ChId, Channel, Request, Payload, State=#state{prefix=Prefix, module=Module}) ->
-    case invoke_callback(Module, coap_delete, [ChId, Prefix, uri_suffix(Prefix, Request), Request, Payload]) of
+created_or_changed(State=#state{resource={ok, _}}) ->
+    {ok, changed};
+created_or_changed(State=#state{resource={error, not_found}}) ->
+    {ok, created}.
+
+delete_resource(ChId, Channel, Request, State=#state{prefix=Prefix, module=Module}) ->
+    case invoke_callback(Module, coap_delete, [ChId, Prefix, uri_suffix(Prefix, Request), Request]) of
         ok ->
             send_response(Channel, Request, {ok, deleted}, #coap_content{}, State);
         {error, Error} ->
@@ -148,13 +197,13 @@ invoke_callback(Module, Fun, Args) ->
             case lists:member({Fun, length(Args)}, Exports) of
                 true ->
                     case catch apply(Module, Fun, Args) of
-                        {'EXIT', Error} -> throw({error, internal_server_error});
+                        {'EXIT', Error} -> {error, internal_server_error};
                         Response -> Response
                     end;
                 false ->
-                    throw({error, method_not_allowed})
+                    {error, method_not_allowed}
             end;
-        {'EXIT', {undef, _}} -> throw({error, service_unavailable})
+        {'EXIT', {undef, _}} -> {error, service_unavailable}
     end.
 
 send_response(Channel, Request=#coap_message{options=Options}, Code, Content, State) ->

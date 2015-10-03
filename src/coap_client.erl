@@ -10,7 +10,7 @@
 % convenience functions for building CoAP clients
 -module(coap_client).
 
--export([ping/1, request/2, request/3]).
+-export([ping/1, request/2, request/3, request/4]).
 
 -include("coap.hrl").
 
@@ -26,13 +26,16 @@ ping(Uri) ->
         end).
 
 request(Method, Uri) ->
-    request(Method, Uri, #coap_content{}).
+    request(Method, Uri, #coap_content{}, []).
 
 request(Method, Uri, Content) ->
+    request(Method, Uri, Content, []).
+
+request(Method, Uri, Content, Options) ->
     {PeerIP, PortNo, Path} = resolve_uri(Uri),
     channel_apply({PeerIP, PortNo},
         fun(Channel) ->
-            ROpt = uri_path(Path, []),
+            ROpt = uri_path(Path, Options),
             request_block(Channel, Method, ROpt, Content)
         end).
 
@@ -64,7 +67,7 @@ await_response(Channel, Method, ROpt, Ref, Content, Fragment) ->
                 {Num, true, Size} ->
                     request_block(Channel, Method, ROpt, {Num+1, false, Size}, Content)
             end;
-        {coap_response, _ChId, Channel, Ref, #coap_message{method={ok, Code}, options=Options, payload=Data}} ->
+        {coap_response, _ChId, Channel, Ref, Message=#coap_message{method={ok, Code}, options=Options, payload=Data}} ->
             case proplists:get_value(block2, Options) of
                 {Num, true, Size} ->
                     % more blocks follow, ask for more
@@ -73,10 +76,7 @@ await_response(Channel, Method, ROpt, Ref, Content, Fragment) ->
                     await_response(Channel, Method, ROpt, Ref2, Content, <<Fragment/binary, Data/binary>>);
                 _Else ->
                     % not segmented
-                    {ok, Code, #coap_content{
-                        etag = proplists:get_value(etag, Options),
-                        format = proplists:get_value(content_format, Options),
-                        payload = <<Fragment/binary, Data/binary>>}}
+                    {ok, Code, coap_message:get_content(Message#coap_message{payload= <<Fragment/binary, Data/binary>>})}
             end;
         {coap_response, _ChId, Channel, Ref, #coap_message{method=Result, payload= <<>>}} ->
             Result;
