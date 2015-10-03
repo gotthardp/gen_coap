@@ -11,7 +11,7 @@
 -module(coap_message).
 
 -export([request/2, request/3, request/4, response/1, response/2, response/3]).
--export([set/3, set_payload/2, set_resource/2, set_resource/3]).
+-export([set/3, set_payload/2, set_content/2, set_content/3]).
 
 -include("coap.hrl").
 
@@ -23,8 +23,8 @@ request(Type, Method, Payload) ->
 
 request(Type, Method, Payload, Options) when is_binary(Payload) ->
     #coap_message{type=Type, method=Method, payload=Payload, options=Options};
-request(Type, Method, Resource=#coap_resource{}, Options) ->
-    set_resource(Resource,
+request(Type, Method, Content=#coap_content{}, Options) ->
+    set_content(Content,
         #coap_message{type=Type, method=Method, options=Options}).
 
 
@@ -62,8 +62,8 @@ set_method(Method, Msg) ->
         method=Method
     }.
 
-set_payload(Payload=#coap_resource{}, Msg) ->
-    set_resource(Payload, undefined, Msg);
+set_payload(Payload=#coap_content{}, Msg) ->
+    set_content(Payload, undefined, Msg);
 set_payload(Payload, Msg) when is_binary(Payload) ->
     Msg#coap_message{
         payload=Payload
@@ -73,23 +73,23 @@ set_payload(Payload, Msg) when is_list(Payload) ->
         payload=list_to_binary(Payload)
     }.
 
-set_resource(Resource, Msg) ->
-    set_resource(Resource, undefined, Msg).
+set_content(Content, Msg) ->
+    set_content(Content, undefined, Msg).
 
 % segmentation not requested and not required
-set_resource(#coap_resource{etag=ETag, format=Format, content=Content}, undefined, Msg)
-        when byte_size(Content) =< ?MAX_BLOCK_SIZE ->
+set_content(#coap_content{etag=ETag, format=Format, payload=Payload}, undefined, Msg)
+        when byte_size(Payload) =< ?MAX_BLOCK_SIZE ->
     set(etag, [ETag],
         set(content_format, Format,
-            set_payload(Content, Msg)));
+            set_payload(Payload, Msg)));
 % segmentation not requested, but required (late negotiation)
-set_resource(Resource, undefined, Msg) ->
-    set_resource(Resource, {0, true, ?MAX_BLOCK_SIZE}, Msg);
+set_content(Content, undefined, Msg) ->
+    set_content(Content, {0, true, ?MAX_BLOCK_SIZE}, Msg);
 % segmentation requested (early negotiation)
-set_resource(#coap_resource{etag=ETag, format=Format, content=Content}, Block, Msg) ->
+set_content(#coap_content{etag=ETag, format=Format, payload=Payload}, Block, Msg) ->
     set(etag, [ETag],
         set(content_format, Format,
-            set_payload_block(Content, Block, Msg))).
+            set_payload_block(Payload, Block, Msg))).
 
 set_payload_block(Content, Block, Msg=#coap_message{method=Method}) when is_atom(Method) ->
     set_payload_block(Content, block1, Block, Msg);

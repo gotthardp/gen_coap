@@ -8,7 +8,7 @@
 %
 
 % tests per ETSI CoAP test specifications (and few more)
--module(single_resource_tests).
+-module(blockwise_transfer_tests).
 
 -export([coap_discover/2, coap_get/4]).
 
@@ -16,7 +16,7 @@
 -include_lib("gen_coap/include/coap.hrl").
 
 % fixture is my friend
-single_resource_test_() ->
+blockwise_transfer_test_() ->
     {setup,
         fun() ->
             application:start(gen_coap),
@@ -25,7 +25,7 @@ single_resource_test_() ->
         fun(_State) ->
             application:stop(gen_coap)
         end,
-        fun single_resource/1}.
+        fun blockwise_transfer/1}.
 
 coap_discover(Prefix, _Args) ->
     [{absolute, Prefix, []}].
@@ -34,10 +34,10 @@ coap_discover(Prefix, _Args) ->
 coap_get(_ChId, _Prefix, [Size], Request) ->
     {ok, text_resource(binary_to_integer(Size))}.
 
-single_resource(_State) ->
+blockwise_transfer(_State) ->
     [
     % discovery
-    ?_assertMatch({ok,content,#coap_resource{format= <<"application/link-format">>, content= <<"</text>">>}},
+    ?_assertMatch({ok,content,#coap_content{format= <<"application/link-format">>, payload= <<"</text>">>}},
         coap_client:request(get, "coap://127.0.0.1/.well-known/core")),
     % resource access
     ?_assertEqual({ok,content,text_resource(128)}, coap_client:request(get, "coap://127.0.0.1/text/128")),
@@ -51,7 +51,7 @@ single_resource(_State) ->
     ].
 
 text_resource(Size) ->
-    #coap_resource{format= <<"text/plain">>, content=large_binary(Size, <<"X">>)}.
+    #coap_content{format= <<"text/plain">>, payload=large_binary(Size, <<"X">>)}.
 
 large_binary(Size, Acc) when Size > 2*byte_size(Acc) ->
     large_binary(Size, <<Acc/binary, Acc/binary>>);

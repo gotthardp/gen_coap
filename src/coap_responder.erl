@@ -118,7 +118,7 @@ handle_method(ChId, Channel, Request=#coap_message{method='delete', options=Opti
 handle_method(_ChId, _Channel, _Request, _State) ->
     throw({error, method_not_allowed}).
 
-cache_invalid(#coap_message{options=Options}, #state{cached=#coap_resource{etag=ETag}}) ->
+cache_invalid(#coap_message{options=Options}, #state{cached=#coap_content{etag=ETag}}) ->
     case lists:member(ETag, proplists:get_value(etag, Options, [])) of
         true -> throw({ok, valid});
         false -> ok
@@ -128,20 +128,10 @@ cache_invalid(_Message, _State) ->
 
 get_resource(ChId, Channel, Request, State=#state{prefix=Prefix, module=Module}) ->
     case invoke_callback(Module, coap_get, [ChId, Prefix, uri_suffix(Prefix, Request), Request]) of
-        {ok, Resource=#coap_resource{}} ->
-            send_resource(Channel, Request, Resource, State#state{cached=Resource});
+        {ok, Resource=#coap_content{}} ->
+            send_response(Channel, Request, {ok, content}, Resource, State#state{cached=Resource});
         {error, Error} ->
             throw({error, Error})
-    end.
-
-send_resource(Channel, Request=#coap_message{options=Options}, Resource, State) ->
-    Block2 = proplists:get_value(block2, Options),
-    Response = coap_message:set_resource(Resource, Block2,
-                   coap_message:response({ok, content}, Request)),
-    coap_channel:send(Channel, Response),
-    case is_blockwise(Request) or is_blockwise(Response) of
-        true -> {cache, ?EXCHANGE_LIFETIME, State};
-        false -> {stop, State}
     end.
 
 invoke_callback(Module, Fun, Args) ->
@@ -152,6 +142,16 @@ invoke_callback(Module, Fun, Args) ->
                 false -> throw({error, method_not_allowed})
             end;
         {'EXIT', {undef, _}} -> throw({error, service_unavailable})
+    end.
+
+send_response(Channel, Request=#coap_message{options=Options}, Code, Content, State) ->
+    Block2 = proplists:get_value(block2, Options),
+    Response = coap_message:set_content(Content, Block2,
+                   coap_message:response(Code, Request)),
+    coap_channel:send(Channel, Response),
+    case is_blockwise(Request) or is_blockwise(Response) of
+        true -> {cache, ?EXCHANGE_LIFETIME, State};
+        false -> {stop, State}
     end.
 
 uri_suffix(Prefix, #coap_message{options=Options}) ->

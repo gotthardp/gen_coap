@@ -2,6 +2,6 @@
 
 -record(coap_message, {type, method, id, token = <<>>, options = [], payload = <<>>}).
 
--record(coap_resource, {etag, format, content = <<>>}).
+-record(coap_content, {etag, format, payload = <<>>}).
 
 -type coap_message() :: #coap_message{}.
