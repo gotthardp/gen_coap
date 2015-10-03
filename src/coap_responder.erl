@@ -79,7 +79,7 @@ handle(ChId, Channel, Request=#coap_message{options=Options}, State) ->
                     coap_message:response({ok, continue}, Request))),
             {cache, ?EXCHANGE_LIFETIME, State2};
         {ok, Payload, State2} ->
-            handle_method(ChId, Channel, Request, State)
+            handle_method(ChId, Channel, Request, Payload, State)
     end.
 
 assemble_payload(Request=#coap_message{payload=Payload}, undefined, State) ->
@@ -98,7 +98,7 @@ assemble_payload(Request=#coap_message{payload=Segment}, {Num, false, Size}, Sta
         end, <<>>, orddict:to_list(Segs)),
     {ok, <<Payload/binary, Segment/binary>>, State#state{segs=orddict:new()}}.
 
-handle_method(ChId, Channel, Request=#coap_message{method='get', options=Options}, State) ->
+handle_method(ChId, Channel, Request=#coap_message{method='get', options=Options}, Payload, State) ->
     case proplists:get_value(observe, Options) of
 %        [0] ->
 %            handle_subscribe(Module, ChId, Channel, Prefix, Suffix, Message);
@@ -106,16 +106,16 @@ handle_method(ChId, Channel, Request=#coap_message{method='get', options=Options
 %            handle0(Module, [coap_unsubscribe, coap_get], ChId, Channel, Prefix, Suffix, Message);
         undefined ->
             ok = cache_invalid(Request, State),
-            get_resource(ChId, Channel, Request, State);
+            get_resource(ChId, Channel, Request, Payload, State);
         _Else -> {stop, {error, bad_option}}
     end;
-handle_method(ChId, Channel, Request=#coap_message{method='post', options=Options}, State) ->
+handle_method(ChId, Channel, Request=#coap_message{method='post', options=Options}, Payload, State) ->
     throw({error, method_not_allowed});
-handle_method(ChId, Channel, Request=#coap_message{method='put', options=Options}, State) ->
+handle_method(ChId, Channel, Request=#coap_message{method='put', options=Options}, Payload, State) ->
     throw({error, method_not_allowed});
-handle_method(ChId, Channel, Request=#coap_message{method='delete', options=Options}, State) ->
-    throw({error, method_not_allowed});
-handle_method(_ChId, _Channel, _Request, _State) ->
+handle_method(ChId, Channel, Request=#coap_message{method='delete', options=Options}, Payload, State) ->
+    delete_resource(ChId, Channel, Request, Payload, State);
+handle_method(_ChId, _Channel, _Request, _Payload, _State) ->
     throw({error, method_not_allowed}).
 
 cache_invalid(#coap_message{options=Options}, #state{cached=#coap_content{etag=ETag}}) ->
@@ -126,10 +126,18 @@ cache_invalid(#coap_message{options=Options}, #state{cached=#coap_content{etag=E
 cache_invalid(_Message, _State) ->
     ok.
 
-get_resource(ChId, Channel, Request, State=#state{prefix=Prefix, module=Module}) ->
-    case invoke_callback(Module, coap_get, [ChId, Prefix, uri_suffix(Prefix, Request), Request]) of
+get_resource(ChId, Channel, Request, Payload, State=#state{prefix=Prefix, module=Module}) ->
+    case invoke_callback(Module, coap_get, [ChId, Prefix, uri_suffix(Prefix, Request), Request, Payload]) of
         {ok, Resource=#coap_content{}} ->
             send_response(Channel, Request, {ok, content}, Resource, State#state{cached=Resource});
+        {error, Error} ->
+            throw({error, Error})
+    end.
+
+delete_resource(ChId, Channel, Request, Payload, State=#state{prefix=Prefix, module=Module}) ->
+    case invoke_callback(Module, coap_delete, [ChId, Prefix, uri_suffix(Prefix, Request), Request, Payload]) of
+        ok ->
+            send_response(Channel, Request, {ok, deleted}, #coap_content{}, State);
         {error, Error} ->
             throw({error, Error})
     end.
@@ -138,8 +146,13 @@ invoke_callback(Module, Fun, Args) ->
     case catch Module:module_info(exports) of
         Exports when is_list(Exports) ->
             case lists:member({Fun, length(Args)}, Exports) of
-                true -> apply(Module, Fun, Args);
-                false -> throw({error, method_not_allowed})
+                true ->
+                    case catch apply(Module, Fun, Args) of
+                        {'EXIT', Error} -> throw({error, internal_server_error});
+                        Response -> Response
+                    end;
+                false ->
+                    throw({error, method_not_allowed})
             end;
         {'EXIT', {undef, _}} -> throw({error, service_unavailable})
     end.

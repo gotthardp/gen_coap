@@ -52,6 +52,8 @@ response(Method, Payload, Request) ->
 
 set(_Option, undefined, Msg) ->
     Msg;
+set(_Option, [undefined], Msg) ->
+    Msg;
 set(Option, Value, Msg=#coap_message{options=Options}) ->
     Msg#coap_message{
         options=[{Option, Value}|Options]

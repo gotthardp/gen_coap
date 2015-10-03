@@ -7,7 +7,6 @@
 % Copyright (c) 2015 Petr Gotthard <petr.gotthard@centrum.cz>
 %
 
-% tests per ETSI CoAP test specifications (and few more)
 -module(empty_server_tests).
 
 -include_lib("eunit/include/eunit.hrl").
