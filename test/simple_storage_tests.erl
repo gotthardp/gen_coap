@@ -9,60 +9,43 @@
 
 -module(simple_storage_tests).
 
--export([coap_discover/2, coap_get/4, coap_put/4, coap_delete/4]).
--export([do_storage/0]).
+-export([coap_discover/2, coap_get/3, coap_put/4, coap_delete/3]).
+-export([do_storage/0, handle/2]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("gen_coap/include/coap.hrl").
 
+% resource operations
 coap_discover(Prefix, _Args) ->
     [{absolute, Prefix, []}].
 
-% resource generator
-coap_get(_ChId, _Prefix, [Name], _Request) ->
-    send_command({get, Name}).
+coap_get(_ChId, _Prefix, [Name]) ->
+    test_utils:send_command({get, Name}).
 
-coap_put(_ChId, _Prefix, [Name], Request) ->
-    send_command({put, Name, coap_message:get_content(Request)}).
+coap_put(_ChId, _Prefix, [Name], Content) ->
+    test_utils:send_command({put, Name, Content}).
 
-coap_delete(_ChId, _Prefix, [Name], _Request) ->
-    send_command({delete, Name}).
-
-send_command(Command) ->
-    storage ! {self(), Command},
-    receive
-        Response -> Response
-    end.
+coap_delete(_ChId, _Prefix, [Name]) ->
+    test_utils:send_command({delete, Name}).
 
 % simple storage
-handle({get, Name}) ->
-    case ets:lookup(resources, Name) of
-        [{Name, Resource}] -> {ok, Resource};
-        [] -> {error, not_found}
-    end;
-
-handle({put, Name, Resource}) ->
-    ets:insert(resources, {Name, Resource}),
-    ok;
-
-handle({delete, Name}) ->
-    true = ets:delete(resources, Name),
-    ok.
-
 do_storage() ->
     resources = ets:new(resources, [set, named_table]),
-    await_command(),
+    test_utils:await_command(?MODULE, []),
     ets:delete(resources).
 
-await_command() ->
-    receive
-        {Pid, Command} ->
-            Response = handle(Command),
-            Pid ! Response,
-            await_command();
-        stop ->
-            ok
-    end.
+handle({get, Name}, State) ->
+    case ets:lookup(resources, Name) of
+        [{Name, Resource}] -> {ok, Resource, State};
+        [] -> {error, not_found, State}
+    end;
+handle({put, Name, Resource}, State) ->
+    ets:insert(resources, {Name, Resource}),
+    {ok, State};
+handle({delete, Name}, State) ->
+    true = ets:delete(resources, Name),
+    {ok, State}.
+
 
 simple_storage_test_() ->
     {setup,
@@ -96,7 +79,7 @@ simple_storage_test(_State) ->
     ?_assertEqual({ok, content, #coap_content{etag= <<"1">>, payload= <<"1">>}},
         coap_client:request(get, "coap://127.0.0.1/storage/one")),
 
-    ?_assertEqual({ok, valid, #coap_content{}},
+    ?_assertEqual({ok, valid, #coap_content{etag= <<"1">>}},
         coap_client:request(get, "coap://127.0.0.1/storage/one",
             #coap_content{}, [{etag, [<<"1">>]}])),
 
@@ -111,7 +94,11 @@ simple_storage_test(_State) ->
         coap_client:request(get, "coap://127.0.0.1/storage/one",
             #coap_content{}, [{etag, [<<"1">>]}])),
 
-    ?_assertEqual({ok, valid, #coap_content{}},
+    % observe existing resource when coap_observe is not implemented
+    ?_assertEqual({ok, content, #coap_content{etag= <<"2">>, payload= <<"2">>}},
+        coap_observer:observe("coap://127.0.0.1/storage/one")),
+
+    ?_assertEqual({ok, valid, #coap_content{etag= <<"2">>}},
         coap_client:request(get, "coap://127.0.0.1/storage/one",
             #coap_content{}, [{etag, [<<"1">>, <<"2">>]}])),
 
@@ -119,7 +106,11 @@ simple_storage_test(_State) ->
         coap_client:request(delete, "coap://127.0.0.1/storage/one")),
 
     ?_assertEqual({error, not_found},
-        coap_client:request(get, "coap://127.0.0.1/storage/one"))
+        coap_client:request(get, "coap://127.0.0.1/storage/one")),
+
+    % observe non-existing resource when coap_observe is not implemented
+    ?_assertEqual({error, not_found},
+        coap_observer:observe("coap://127.0.0.1/storage/one"))
     ].
 
 % end of file

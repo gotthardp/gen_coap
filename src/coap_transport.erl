@@ -11,7 +11,7 @@
 % handles message retransmission and de-duplication
 -module(coap_transport).
 
--export([init/6, received/2, send/2, timeout/2]).
+-export([init/6, received/2, send/2, timeout/2, awaits_response/1]).
 -export([idle/2, got_non/2, sent_non/2, got_rst/2, await_aack/2, pack_sent/2, await_pack/2, aack_sent/2]).
 
 -define(ACK_TIMEOUT, 2000).
@@ -40,6 +40,11 @@ timeout(transport, _State) ->
 % process timeout
 timeout(Event, State=#state{phase=Phase}) ->
     ?MODULE:Phase({timeout, Event}, State).
+% check if we can send a response
+awaits_response(#state{phase=await_aack}) ->
+    true;
+awaits_response(_State) ->
+    false.
 
 % ->NON
 idle(Msg={in, <<1:2, 1:2, _:12, _Tail/bytes>>}, State=#state{channel=Channel, tid=TrId}) ->
@@ -62,7 +67,7 @@ idle(Msg={out, #coap_message{type=con}}, State=#state{channel=Channel, tid=TrId}
 
 in_non({in, BinMessage}, State) ->
     Message = coap_message_parser:decode(BinMessage),
-    io:fwrite("=> ~p~n", [Message]),
+    %io:fwrite("=> ~p~n", [Message]),
     case Message of
         #coap_message{method=Method} when is_atom(Method) ->
             handle_request(Message, State);
@@ -78,7 +83,7 @@ got_non({in, _Message}, State) ->
 % --- outgoing NON
 
 out_non({out, Message}, State=#state{sock=Sock, cid=ChId}) ->
-    io:fwrite("<= ~p~n", [Message]),
+    %io:fwrite("<= ~p~n", [Message]),
     BinMessage = coap_message_parser:encode(Message),
     Sock ! {datagram, ChId, BinMessage},
     next_state(sent_non, State).
@@ -86,7 +91,7 @@ out_non({out, Message}, State=#state{sock=Sock, cid=ChId}) ->
 % we may get reset
 sent_non({in, BinMessage}, State)->
     Message = coap_message_parser:decode(BinMessage),
-    io:fwrite("-> ~p~n", [Message]),
+    %io:fwrite("-> ~p~n", [Message]),
     case Message of
         #coap_message{type=reset} ->
             handle_error(Message, reset, State)
@@ -100,7 +105,7 @@ got_rst({in, _BinMessage}, State)->
 
 in_con({in, BinMessage}, State=#state{channel=Channel}) ->
     Message = coap_message_parser:decode(BinMessage),
-    io:fwrite("=> ~p~n", [Message]),
+    %io:fwrite("=> ~p~n", [Message]),
     case Message of
         #coap_message{method=undefined, id=MsgId} ->
             % provoked reset
@@ -118,12 +123,17 @@ await_aack({in, _BinMessage}, State) ->
     % ignore request retransmission
     next_state(await_aack, State);
 await_aack({timeout, await_aack}, State=#state{sock=Sock, cid=ChId, msg=BinAck}) ->
-    io:fwrite("<- ack [application didn't respond]~n"),
+    %io:fwrite("<- ack [application didn't respond]~n"),
     Sock ! {datagram, ChId, BinAck},
     next_state(pack_sent, State);
 await_aack({out, Ack}, State=#state{sock=Sock, cid=ChId}) ->
-    io:fwrite("<- ~p~n", [Ack]),
-    BinAck = coap_message_parser:encode(Ack),
+    % set correct type for a piggybacked response
+    Ack2 = case Ack of
+        #coap_message{type=con} -> Ack#coap_message{type=ack};
+        Else -> Else
+    end,
+    %io:fwrite("<- ~p~n", [Ack2]),
+    BinAck = coap_message_parser:encode(Ack2),
     Sock ! {datagram, ChId, BinAck},
     next_state(pack_sent, State#state{msg=BinAck}).
 
@@ -135,7 +145,7 @@ pack_sent({in, _BinMessage}, State=#state{sock=Sock, cid=ChId, msg=BinAck}) ->
 % --- outgoing CON->ACK|RST
 
 out_con({out, Message}, State=#state{sock=Sock, cid=ChId}) ->
-    io:fwrite("<= ~p~n", [Message]),
+    %io:fwrite("<= ~p~n", [Message]),
     BinMessage = coap_message_parser:encode(Message),
     Sock ! {datagram, ChId, BinMessage},
     random:seed(os:timestamp()),
@@ -145,7 +155,7 @@ out_con({out, Message}, State=#state{sock=Sock, cid=ChId}) ->
 % peer ack
 await_pack({in, BinAck}, State) ->
     Ack = coap_message_parser:decode(BinAck),
-    io:fwrite("-> ~p~n", [Ack]),
+    %io:fwrite("-> ~p~n", [Ack]),
     case Ack of
         #coap_message{type=ack, method=undefined} ->
             handle_ack(Ack, State);
@@ -161,7 +171,7 @@ await_pack({timeout, await_pack}, State=#state{sock=Sock, cid=ChId, msg=Message,
     Timeout2 = Timeout*2,
     next_state(await_pack, State#state{retry_time=Timeout2, retry_count=Count+1}, Timeout2);
 await_pack({timeout, await_pack}, State=#state{tid={out, MsgId}, msg=Message}) ->
-    io:fwrite("-> timeout ~p~n", [MsgId]),
+    %io:fwrite("-> timeout ~p~n", [MsgId]),
     handle_error(Message, timeout, State),
     next_state(aack_sent, State).
 
@@ -189,7 +199,7 @@ handle_response(Message, #state{cid=ChId, channel=Channel, receiver={Sender, Ref
     Sender ! {coap_response, ChId, Channel, Ref, Message},
     request_complete(Channel, Message).
 
-handle_error(Message=#coap_message{id=MsgId}, Error, #state{cid=ChId, channel=Channel, receiver={Sender, Ref}}) ->
+handle_error(Message, Error, #state{cid=ChId, channel=Channel, receiver={Sender, Ref}}) ->
     Sender ! {coap_error, ChId, Channel, Ref, Error},
     request_complete(Channel, Message).
 

@@ -3,8 +3,8 @@
 Pure Erlang implementation of the Constrained Application Protocol (CoAP),
 which aims to be conformant with:
  - CoAP core protocol [RFC 7252](https://tools.ietf.org/rfc/rfc7252.txt)
- - CoAP Observe option [draft-ietf-core-observe-16](https://tools.ietf.org/id/draft-ietf-core-observe-16.txt)
- - Block-wise transfers in CoAP [draft-ietf-core-block-17](https://tools.ietf.org/id/draft-ietf-core-block-17.txt)
+ - CoAP Observe option [RFC 7641](https://tools.ietf.org/rfc/rfc7641.txt)
+ - Block-wise transfers in CoAP [draft-ietf-core-block-18](https://tools.ietf.org/id/draft-ietf-core-block-18.txt)
  - CoRE link format [RFC 6690](https://tools.ietf.org/rfc/rfc6690.txt)
 
 Tested with the following CoAP implementations:

@@ -11,6 +11,7 @@
 -module(coap_client).
 
 -export([ping/1, request/2, request/3, request/4]).
+-export([resolve_uri/1]).
 
 -include("coap.hrl").
 
@@ -35,8 +36,7 @@ request(Method, Uri, Content, Options) ->
     {PeerIP, PortNo, Path} = resolve_uri(Uri),
     channel_apply({PeerIP, PortNo},
         fun(Channel) ->
-            ROpt = uri_path(Path, Options),
-            request_block(Channel, Method, ROpt, Content)
+            request_block(Channel, Method, [{uri_path, Path} | Options], Content)
         end).
 
 request_block(Channel, Method, ROpt, Content) ->
@@ -47,14 +47,6 @@ request_block(Channel, Method, ROpt, Block1, Content) ->
         coap_message:set_content(Content, Block1,
             coap_message:request(con, Method, <<>>, ROpt))),
     await_response(Channel, Method, ROpt, Ref, Content).
-
-
-uri_path([], Acc) ->
-    Acc;
-uri_path([$/], Acc) ->
-    Acc;
-uri_path([$/ | Path], Acc) ->
-    [{uri_path, binary:split(list_to_binary(Path), [<<$/>>], [global])}|Acc].
 
 
 await_response(Channel, Method, ROpt, Ref, Content) ->
@@ -76,20 +68,30 @@ await_response(Channel, Method, ROpt, Ref, Content, Fragment) ->
                     await_response(Channel, Method, ROpt, Ref2, Content, <<Fragment/binary, Data/binary>>);
                 _Else ->
                     % not segmented
-                    {ok, Code, coap_message:get_content(Message#coap_message{payload= <<Fragment/binary, Data/binary>>})}
+                    return_response({ok, Code}, Message#coap_message{payload= <<Fragment/binary, Data/binary>>})
             end;
-        {coap_response, _ChId, Channel, Ref, #coap_message{method=Result, payload= <<>>}} ->
-            Result;
+        {coap_response, _ChId, Channel, Ref, Message=#coap_message{method=Code}} ->
+            return_response(Code, Message);
         {coap_error, _ChId, Channel, Ref, reset} ->
             {error, reset}
     end.
 
+return_response({ok, Code}, Message) ->
+    {ok, Code, coap_message:get_content(Message)};
+return_response({error, Code}, #coap_message{payload= <<>>}) ->
+    {error, Code};
+return_response({error, Code}, Message) ->
+    {error, Code, coap_message:get_content(Message)}.
 
 resolve_uri(Uri) ->
     {ok, {_Scheme, _UserInfo, Host, PortNo, Path, _Query}} =
         http_uri:parse(Uri, [{scheme_defaults, [{coap, 5683}]}]),
     {ok, PeerIP} = inet:getaddr(Host, inet),
-    {PeerIP, PortNo, Path}.
+    {PeerIP, PortNo, split_path(Path)}.
+
+split_path([]) -> [];
+split_path([$/]) -> [];
+split_path([$/ | Path]) -> binary:split(list_to_binary(Path), [<<$/>>], [global]).
 
 channel_apply(ChId, Fun) ->
     {ok, Sock} = coap_udp_socket:start_link(),

@@ -29,12 +29,11 @@ start_link(SupPid, SockPid, ChId, ReSup) ->
 ping(Channel) ->
     send_message(Channel, #coap_message{type=con}, make_ref()).
 
-send(Channel, Message=#coap_message{type=Type}) when Type==ack; Type==reset ->
-    send_ack(Channel, Message);
-send(Channel, Message=#coap_message{method=Method}) when is_atom(Method) ->
-    send_request(Channel, Message, make_ref());
+send(Channel, Message=#coap_message{type=Type, method=Method})
+        when is_tuple(Method); Type==ack; Type==reset ->
+    send_response(Channel, Message, make_ref());
 send(Channel, Message=#coap_message{}) ->
-    send_message(Channel, Message, make_ref()).
+    send_request(Channel, Message, make_ref()).
 
 send_request(Pid, Message, Ref) ->
     gen_server:cast(Pid, {send_request, Message, {self(), Ref}}),
@@ -42,8 +41,9 @@ send_request(Pid, Message, Ref) ->
 send_message(Pid, Message, Ref) ->
     gen_server:cast(Pid, {send_message, Message, {self(), Ref}}),
     {ok, Ref}.
-send_ack(Pid, Message) ->
-    gen_server:cast(Pid, {send_ack, Message}).
+send_response(Pid, Message, Ref) ->
+    gen_server:cast(Pid, {send_response, Message, {self(), Ref}}),
+    {ok, Ref}.
 
 close(Pid) ->
     gen_server:cast(Pid, shutdown).
@@ -63,9 +63,9 @@ handle_cast({send_request, Message, Receiver}, State) ->
 % outgoing CON(0) or NON(1)
 handle_cast({send_message, Message, Receiver}, State) ->
     transport_new_message(Message, Receiver, State);
-% outgoing ACK(2) or RST(3)
-handle_cast({send_ack, Message=#coap_message{id=MsgId}}, State) ->
-    transport_ack({in, MsgId}, Message, State);
+% outgoing response, either CON(0) or NON(1), piggybacked ACK(2) or RST(3)
+handle_cast({send_response, Message, Receiver}, State) ->
+    transport_response(Message, Receiver, State);
 handle_cast(shutdown, State) ->
     {stop, normal, State};
 handle_cast(Request, State) ->
@@ -84,12 +84,19 @@ transport_message(TrId, Message, Receiver, State) ->
     update_state(State, TrId,
         coap_transport:send(Message, create_transport(TrId, Receiver, State))).
 
-transport_ack(TrId, Message, State=#state{trans=Trans}) ->
-    update_state(State, TrId,
-        case dict:find(TrId, Trans) of
-            error -> undefined; % ignore unexpected responses
-            {ok, TrState} -> coap_transport:send(Message, TrState)
-        end).
+transport_response(Message=#coap_message{id=MsgId}, Receiver, State=#state{trans=Trans}) ->
+    case dict:find({in, MsgId}, Trans) of
+        {ok, TrState} ->
+            case coap_transport:awaits_response(TrState) of
+                true ->
+                    update_state(State, {in, MsgId},
+                        coap_transport:send(Message, TrState));
+                false ->
+                    transport_new_message(Message, Receiver, State)
+            end;
+        error ->
+            transport_new_message(Message, Receiver, State)
+    end.
 
 % incoming CON(0) or NON(1) request
 handle_info({datagram, BinMessage= <<?VERSION:2, 0:1, _:1, _TKL:4, 0:3, _CodeDetail:5, MsgId:16, _/bytes>>}, State) ->
@@ -147,8 +154,8 @@ handle_info(Info, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-terminate(Reason, #state{sup=SupPid, sock=SockPid, cid=ChId}) ->
-    io:fwrite("channel ~p finished ~p~n", [ChId, Reason]),
+terminate(_Reason, #state{sup=SupPid, sock=SockPid, cid=ChId}) ->
+    %io:fwrite("channel ~p finished ~p~n", [ChId, Reason]),
     SockPid ! {terminated, SupPid, ChId},
     ok.
 
