@@ -47,6 +47,7 @@ handle({delete, Name}, State) ->
     {ok, State}.
 
 
+% fixture is my friend
 simple_storage_test_() ->
     {setup,
         fun() ->

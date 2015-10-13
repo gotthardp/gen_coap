@@ -160,7 +160,7 @@ handle_observe(ChId, Request=#coap_message{options=Options},
             return_resource(Request, State#state{observer=Request});
         {error, method_not_allowed} ->
             % observe is not supported, fallback to standard get
-            return_resource(Request, State);
+            return_resource(Request, State#state{observer=undefined});
         {error, Error} ->
             return_response(Request, {error, Error}, State)
     end;
@@ -230,7 +230,7 @@ return_response(Request, Code, Content, State) ->
             coap_message:response(Code, Request)),
         State).
 
-send_observable(Request=#coap_message{token=Token, options=Options}, Response,
+send_observable(#coap_message{token=Token, options=Options}, Response,
         State=#state{observer=Observer, obseq=Seq}) ->
     case {proplists:get_value(observe, Options), Observer} of
         % when requested observe and is observing, return the sequence number
@@ -240,13 +240,14 @@ send_observable(Request=#coap_message{token=Token, options=Options}, Response,
             send_response(Response, State)
     end.
 
-send_response(Response=#coap_message{options=Options}, State=#state{channel=Channel}) ->
+send_response(Response=#coap_message{options=Options},
+        State=#state{channel=Channel, observer=Observer}) ->
     coap_channel:send(Channel, Response),
-    case proplists:is_defined(observe, Options) of
-        true ->
+    case Observer of
+        #coap_message{} ->
             % notifications will follow
             {noreply, State};
-        false ->
+        undefined ->
             case proplists:get_value(block2, Options) of
                 {_, true, _} ->
                     % client is expected to ask for more blocks

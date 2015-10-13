@@ -16,8 +16,8 @@
 -include("coap.hrl").
 
 ping(Uri) ->
-    {PeerIP, PortNo, _Path} = resolve_uri(Uri),
-    channel_apply({PeerIP, PortNo},
+    {ChId, _Path} = resolve_uri(Uri),
+    channel_apply(ChId,
         fun(Channel) ->
             {ok, Ref} = coap_channel:ping(Channel),
             case await_response(Channel, undefined, [], Ref, <<>>) of
@@ -33,8 +33,8 @@ request(Method, Uri, Content) ->
     request(Method, Uri, Content, []).
 
 request(Method, Uri, Content, Options) ->
-    {PeerIP, PortNo, Path} = resolve_uri(Uri),
-    channel_apply({PeerIP, PortNo},
+    {ChId, Path} = resolve_uri(Uri),
+    channel_apply(ChId,
         fun(Channel) ->
             request_block(Channel, Method, [{uri_path, Path} | Options], Content)
         end).
@@ -87,7 +87,7 @@ resolve_uri(Uri) ->
     {ok, {_Scheme, _UserInfo, Host, PortNo, Path, _Query}} =
         http_uri:parse(Uri, [{scheme_defaults, [{coap, 5683}]}]),
     {ok, PeerIP} = inet:getaddr(Host, inet),
-    {PeerIP, PortNo, split_path(Path)}.
+    {{PeerIP, PortNo}, split_path(Path)}.
 
 split_path([]) -> [];
 split_path([$/]) -> [];

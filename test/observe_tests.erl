@@ -11,6 +11,7 @@
 
 -export([coap_discover/2, coap_get/3, coap_observe/3, coap_put/4]).
 -export([do_storage/0, handle/2]).
+-import(test_utils, [text_resource/2]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("gen_coap/include/coap.hrl").
@@ -23,7 +24,7 @@ coap_get(_ChId, _Prefix, []) ->
     test_utils:send_command(get).
 
 coap_observe(_ChId, Prefix, []) ->
-    timer:apply_after(500, coap_responder, notify, [Prefix, {ok, #coap_content{payload= <<"2">>}}]),
+    timer:apply_after(500, coap_responder, notify, [Prefix, {ok, text_resource(<<"2">>, 3000)}]),
     ok.
 
 coap_put(_ChId, _Prefix, [], Content) ->
@@ -58,14 +59,14 @@ observe_test_() ->
 
 observe_and_wait(Uri) ->
     case coap_observer:observe(Uri) of
-        Subscribed = {ok, _Code, _Content} ->
-            Notify = receive
-                {coap_notify, {ok, Code}, Content} ->
-                    {ok, Code, Content};
-                {coap_notify, {error, Code}} ->
-                    {error, Code}
-            end,
-            {Subscribed, Notify};
+        {ok, Pid, N1, Code1, Content1} ->
+            % wait for one notification and then stop
+            receive
+                {coap_notify, Pid, N2, Code2, Content2} ->
+                    coap_observer:stop(Pid),
+                    {{ok, pid, N1, Code1, Content1},
+                     {coap_notify, pid, N2, Code2, Content2}}
+            end;
         NotSubscribed ->
             NotSubscribed
     end.
@@ -75,9 +76,9 @@ observe_test(_State) ->
     ?_assertEqual({error,not_found},
         observe_and_wait("coap://127.0.0.1/text")),
     ?_assertEqual({ok, created, #coap_content{}},
-        coap_client:request(put, "coap://127.0.0.1/text", #coap_content{payload= <<"1">>})),
-    ?_assertEqual({{ok, content, #coap_content{payload= <<"1">>}},
-            {ok, content, #coap_content{payload= <<"2">>}}},
+        coap_client:request(put, "coap://127.0.0.1/text", text_resource(<<"1">>, 2000))),
+    ?_assertEqual({{ok, pid, 0, content, text_resource(<<"1">>, 2000)},
+            {coap_notify, pid, 1, {ok, content}, text_resource(<<"2">>, 3000)}},
         observe_and_wait("coap://127.0.0.1/text"))
     ].
 

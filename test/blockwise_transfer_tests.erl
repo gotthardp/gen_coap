@@ -10,6 +10,7 @@
 -module(blockwise_transfer_tests).
 
 -export([coap_discover/2, coap_get/3, coap_post/4]).
+-import(test_utils, [text_resource/1]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("gen_coap/include/coap.hrl").
@@ -26,14 +27,6 @@ coap_get(_ChId, [<<"reflect">>], []) ->
 coap_post(_ChId, _Prefix, [], Content) ->
     {ok, content, Content}.
 
-text_resource(Size) ->
-    #coap_content{format= <<"text/plain">>, payload=large_binary(Size, <<"X">>)}.
-
-large_binary(Size, Acc) when Size > 2*byte_size(Acc) ->
-    large_binary(Size, <<Acc/binary, Acc/binary>>);
-large_binary(Size, Acc) ->
-    Sup = binary:part(Acc, 0, Size-byte_size(Acc)),
-    <<Acc/binary, Sup/binary>>.
 
 % fixture is my friend
 blockwise_transfer_test_() ->

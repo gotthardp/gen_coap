@@ -15,7 +15,7 @@
 
 -include("coap.hrl").
 
--record(state, {client, sock, channel, ref, lastseq}).
+-record(state, {client, sock, channel, ropt, ref, lastseq}).
 
 observe(Uri) ->
     observe(Uri, []).
@@ -23,10 +23,17 @@ observe(Uri, Options) ->
     {ok, Pid} = gen_server:start_link(?MODULE, [self(), Uri, Options], []),
     % receive the initial response
     receive
-        {coap_notify, {ok, Code}, Content} ->
+        % request successful, but not subscribed
+        {coap_notify, Pid, undefined, {ok, Code}, Content} ->
             {ok, Code, Content};
-        {coap_notify, {error, Code}} ->
-            {error, Code}
+        % subscribe successful
+        {coap_notify, Pid, N, {ok, Code}, Content} ->
+            {ok, Pid, N, Code, Content};
+        % error
+        {coap_notify, Pid, undefined, {error, Code}, #coap_content{payload= <<>>}} ->
+            {error, Code};
+        {coap_notify, Pid, undefined, {error, Code}, Content} ->
+            {error, Code, Content}
     end.
 
 stop(Pid) ->
@@ -34,13 +41,14 @@ stop(Pid) ->
 
 
 init([Client, Uri, Options]) ->
-    {PeerIP, PortNo, Path} = coap_client:resolve_uri(Uri),
+    {ChId, Path} = coap_client:resolve_uri(Uri),
     {ok, Sock} = coap_udp_socket:start_link(),
-    {ok, Channel} = coap_udp_socket:get_channel(Sock, {PeerIP, PortNo}),
+    {ok, Channel} = coap_udp_socket:get_channel(Sock, ChId),
     % observe the resource
+    ROpt = [{uri_path, Path}|Options],
     {ok, Ref} = coap_channel:send(Channel,
-        coap_message:request(con, get, <<>>, [{uri_path, Path}, {observe, 0} | Options])),
-    {ok, #state{client=Client, sock=Sock, channel=Channel, ref=Ref}}.
+        coap_message:request(con, get, <<>>, [{observe, 0}|ROpt])),
+    {ok, #state{client=Client, sock=Sock, channel=Channel, ropt=ROpt, ref=Ref}}.
 
 handle_call(_Unknown, _From, State) ->
     {reply, unknown_call, State}.
@@ -51,16 +59,22 @@ handle_cast(Request, State) ->
     io:fwrite("coap_observer unknown cast ~p~n", [Request]),
     {noreply, State}.
 
-handle_info({coap_response, _ChId, Channel, Ref, Message=#coap_message{method={ok, Code}, options=Options, payload=Data}},
-        State=#state{client=Client, channel=Channel, ref=Ref}) ->
-    Client ! {coap_notify, {ok, Code}, coap_message:get_content(Message)},
-    {noreply, State};
+handle_info({coap_response, _ChId, Channel, Ref,
+        Message=#coap_message{method={ok, _Code}, options=Options, payload=Payload}},
+        State=#state{channel=Channel, ref=Ref}) ->
+    case proplists:get_value(block2, Options) of
+        {0, true, _Size} = Block2 ->
+            request_more_blocks(Message, Block2, Payload, State);
+        _Else ->
+            send_notify(Message, State)
+    end;
 handle_info({coap_response, _ChId, Channel, Ref, Message=#coap_message{method={error, Code}}},
         State=#state{client=Client, channel=Channel, ref=Ref}) ->
-    Client ! {coap_notify, {error, Code}},
+    Client ! {coap_notify, self(), undefined, {error, Code}, coap_message:get_content(Message)},
     {stop, normal, State};
 handle_info({coap_error, _ChId, Channel, Ref, reset},
         State=#state{client=Client, channel=Channel, ref=Ref}) ->
+    Client ! {coap_notify, self(), undefined, {error, reset}, #coap_content{}},
     {stop, normal, State};
 handle_info(Info, State) ->
     io:fwrite("coap_observer unexpected ~p~n", [Info]),
@@ -73,5 +87,39 @@ terminate(_Reason, #state{sock=Sock, channel=Channel}) ->
     coap_channel:close(Channel),
     coap_udp_socket:close(Sock),
     ok.
+
+
+request_more_blocks(Notify, {Num, true, Size}, Fragment,
+        State=#state{client=Client, channel=Channel, ropt=ROpt}) ->
+    {ok, Ref2} = coap_channel:send(Channel,
+        coap_message:request(con, get, <<>>, [{block2, {Num+1, false, Size}}|ROpt])),
+    receive
+        {coap_response, _ChId, Channel, Ref2, #coap_message{method={ok, _Code}, options=Options, payload=Data}} ->
+            case proplists:get_value(block2, Options) of
+                {_Num2, true, _Size2} = Block2 ->
+                    request_more_blocks(Notify, Block2, <<Fragment/binary, Data/binary>>, State);
+                _Else ->
+                    send_notify(Notify#coap_message{payload= <<Fragment/binary, Data/binary>>}, State)
+            end;
+        {coap_response, _ChId, Channel, Ref2, Message=#coap_message{method={error, Code}}} ->
+            Client ! {coap_notify, self(), undefined, {error, Code}, coap_message:get_content(Message)},
+            {stop, normal, State}
+    end.
+
+send_notify(Message=#coap_message{method={ok, Code}, options=Options},
+        State=#state{client=Client, lastseq=LastSeq}) ->
+    case proplists:get_value(observe, Options) of
+        undefined ->
+            % subscription is terminated
+            Client ! {coap_notify, self(), undefined, {ok, Code}, coap_message:get_content(Message)},
+            {stop, normal, State};
+        N when LastSeq == undefined; N > LastSeq ->
+            % report and stay subscribed
+            Client ! {coap_notify, self(), N, {ok, Code}, coap_message:get_content(Message)},
+            {noreply, State#state{lastseq=N}};
+        N when N =< LastSeq ->
+            % ignore, but stay subscribed
+            {noreply, State}
+    end.
 
 % end of file
