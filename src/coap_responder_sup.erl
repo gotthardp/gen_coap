@@ -24,7 +24,7 @@ get_responder(SupPid, Request) ->
         {error, Other} -> {error, Other}
     end.
 
-start_responder(SupPid, Message=#coap_message{method=Method, options=Options}) ->
+start_responder(SupPid, #coap_message{method=Method, options=Options}) ->
     Uri = proplists:get_value(uri_path, Options, []),
     supervisor:start_child(SupPid,
         {{Method, Uri},

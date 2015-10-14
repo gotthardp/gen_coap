@@ -10,12 +10,14 @@
 % registry of server content handlers
 % provides the .well-known/code resource and (in future) content queries
 -module(coap_server_content).
--behaviour(gen_server).
+-export([add_handler/3, get_handler/1]).
 
+-behaviour(gen_server).
 -export([start_link/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
+
+-behaviour(coap_resource).
 -export([coap_get/3]).
--export([add_handler/3, get_handler/1]).
 
 -record(state, {reg}).
 

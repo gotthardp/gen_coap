@@ -81,7 +81,7 @@ handle(ChId, Request=#coap_message{options=Options}, State=#state{channel=Channe
         {error, Code} ->
             return_response(Request, {error, Code}, State);
         {continue, State2} ->
-            coap_channel:send(Channel,
+            {ok, _Ref} = coap_channel:send(Channel,
                 coap_message:set(block1, Block1,
                     coap_message:response({ok, continue}, Request))),
             set_timeout(?EXCHANGE_LIFETIME, State2);

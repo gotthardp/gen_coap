@@ -161,7 +161,7 @@ terminate(_Reason, #state{sup=SupPid, sock=SockPid, cid=ChId}) ->
 
 
 first_mid() ->
-    random:seed(os:timestamp()),
+    _ = random:seed(os:timestamp()),
     random:uniform(?MAX_MESSAGE_ID).
 
 next_mid(MsgId) ->
