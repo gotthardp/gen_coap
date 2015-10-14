@@ -19,7 +19,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
     terminate/2, code_change/3]).
 
--record(state, {channel, prefix, module, args, segs, resource, observer, obseq, timer}).
+-record(state, {channel, prefix, module, args, insegs, last_response, observer, obseq, timer}).
 
 -define(EXCHANGE_LIFETIME, 247000).
 
@@ -27,7 +27,10 @@ start_link(Channel, Uri) ->
     gen_server:start_link(?MODULE, [Channel, Uri], []).
 
 notify(Uri, Resource) ->
-    [gen_server:cast(Pid, Resource) || Pid <- pg2:get_members({coap_observer, Uri})].
+    case pg2:get_members({coap_observer, Uri}) of
+        {error, _} -> ok;
+        List -> [gen_server:cast(Pid, Resource) || Pid <- List]
+    end.
 
 init([Channel, Uri]) ->
     % the receiver will be determined based on the URI
@@ -35,7 +38,7 @@ init([Channel, Uri]) ->
         {Prefix, Module, Args} ->
             Channel ! {responder_started},
             {ok, #state{channel=Channel, prefix=Prefix, module=Module, args=Args,
-                segs=orddict:new(), obseq=0}};
+                insegs=orddict:new(), obseq=0}};
         undefined ->
             {stop, not_found}
     end.
@@ -46,8 +49,10 @@ handle_call(_Msg, _From, State) ->
 handle_cast(_Resource, State=#state{observer=undefined}) ->
     % ignore unexpected notification
     {noreply, State};
-handle_cast(Resource, State=#state{observer=Observer}) ->
-    return_resource(Observer, State#state{resource=Resource}).
+handle_cast(Resource=#coap_content{}, State=#state{observer=Observer}) ->
+    return_resource(Observer, Resource, State);
+handle_cast({error, Code}, State=#state{observer=Observer}) ->
+    return_response(Observer, {error, Code}, State).
 
 handle_info({coap_request, ChId, _Channel, undefined, Request}, State) ->
     handle(ChId, Request, State);
@@ -79,99 +84,115 @@ handle(ChId, Request=#coap_message{options=Options}, State=#state{channel=Channe
             coap_channel:send(Channel,
                 coap_message:set(block1, Block1,
                     coap_message:response({ok, continue}, Request))),
-            set_timeout(State2, ?EXCHANGE_LIFETIME);
+            set_timeout(?EXCHANGE_LIFETIME, State2);
         {ok, Payload, State2} ->
-            check_resource(ChId, Request#coap_message{payload=Payload}, State2)
+            process_request(ChId, Request#coap_message{payload=Payload}, State2)
     end.
 
 assemble_payload(#coap_message{payload=Payload}, undefined, State) ->
     {ok, Payload, State};
-assemble_payload(#coap_message{payload=Segment}, {Num, true, Size}, State=#state{segs=Segs}) ->
+assemble_payload(#coap_message{payload=Segment}, {Num, true, Size}, State=#state{insegs=Segs}) ->
     case byte_size(Segment) of
-        Size -> {continue, State#state{segs=orddict:store(Num, Segment, Segs)}};
+        Size -> {continue, State#state{insegs=orddict:store(Num, Segment, Segs)}};
         _Else -> {error, bad_request}
     end;
-assemble_payload(#coap_message{payload=Segment}, {_Num, false, _Size}, State=#state{segs=Segs}) ->
+assemble_payload(#coap_message{payload=Segment}, {_Num, false, _Size}, State=#state{insegs=Segs}) ->
     Payload = lists:foldl(
         fun ({Num1, Segment1}, Acc) when Num1*byte_size(Segment1) == byte_size(Acc) ->
                 <<Acc/binary, Segment1/binary>>;
             (_Else, _Acc) ->
                 throw({error, request_entity_incomplete})
         end, <<>>, orddict:to_list(Segs)),
-    {ok, <<Payload/binary, Segment/binary>>, State#state{segs=orddict:new()}}.
+    {ok, <<Payload/binary, Segment/binary>>, State#state{insegs=orddict:new()}}.
 
-check_resource(ChId, Request, State=#state{prefix=Prefix, module=Module, resource=undefined}) ->
-    Resource = invoke_callback(Module, coap_get, [ChId, Prefix, uri_suffix(Prefix, Request)]),
-    check_preconditions(ChId, Request, State#state{resource=Resource});
-check_resource(ChId, Request, State) ->
-    check_preconditions(ChId, Request, State).
+process_request(ChId, Request=#coap_message{options=Options},
+        State=#state{last_response={ok, Code, Content}}) ->
+    case proplists:get_value(block2, Options) of
+        {N, _, _} when N > 0 ->
+            return_resource(Request, {ok, Code}, Content, State);
+        _Else ->
+            check_resource(ChId, Request, State)
+    end;
+process_request(ChId, Request, State) ->
+    check_resource(ChId, Request, State).
 
-check_preconditions(ChId, Request, State) ->
-    case if_match(Request, State) and if_none_match(Request, State) of
+check_resource(ChId, Request, State=#state{prefix=Prefix, module=Module}) ->
+    case invoke_callback(Module, coap_get, [ChId, Prefix, uri_suffix(Prefix, Request)]) of
+        R1=#coap_content{} ->
+            check_preconditions(ChId, Request, R1, State);
+        R2={error, not_found} ->
+            check_preconditions(ChId, Request, R2, State);
+        {error, Code} ->
+            return_response(Request, {error, Code}, State)
+    end.
+
+check_preconditions(ChId, Request, Resource, State) ->
+    case if_match(Request, Resource) and if_none_match(Request, Resource) of
         true ->
-            handle_method(ChId, Request, State);
+            handle_method(ChId, Request, Resource, State);
         false ->
             return_response(Request, {error, precondition_failed}, State)
     end.
 
-if_match(#coap_message{options=Options}, #state{resource={ok, #coap_content{etag=ETag}}}) ->
+if_match(#coap_message{options=Options}, #coap_content{etag=ETag}) ->
     case proplists:get_value(if_match, Options, []) of
         % empty string matches any existing representation
         [] -> true;
         % match exact resources
         List -> lists:member(ETag, List)
     end;
-if_match(#coap_message{options=Options}, #state{resource={error, _}}) ->
+if_match(#coap_message{options=Options}, {error, not_found}) ->
     not proplists:is_defined(if_match, Options).
 
-if_none_match(#coap_message{options=Options}, #state{resource={ok, _}}) ->
+if_none_match(#coap_message{options=Options}, #coap_content{}) ->
     not proplists:is_defined(if_none_match, Options);
-if_none_match(#coap_message{}, #state{resource={error, _}}) ->
+if_none_match(#coap_message{}, {error, _}) ->
     true.
 
-handle_method(ChId, Request=#coap_message{method='get', options=Options}, State) ->
+handle_method(ChId, Request=#coap_message{method='get', options=Options}, Resource=#coap_content{}, State) ->
     case proplists:get_value(observe, Options) of
         0 ->
-            handle_observe(ChId, Request, State);
+            handle_observe(ChId, Request, Resource, State);
         1 ->
-            handle_unobserve(ChId, Request, State);
+            handle_unobserve(ChId, Request, Resource, State);
         undefined ->
-            return_resource(Request, State);
+            return_resource(Request, Resource, State);
         _Else ->
             return_response(Request, {error, bad_option}, State)
     end;
-handle_method(ChId, Request=#coap_message{method='post'}, State) ->
-%FIXMEEEEEEEEEEE
-    handle_put(ChId, Request, State);
-handle_method(ChId, Request=#coap_message{method='put'}, State) ->
-    handle_put(ChId, Request, State);
-handle_method(ChId, Request=#coap_message{method='delete'}, State) ->
+handle_method(_ChId, Request=#coap_message{method='get'}, {error, Code}, State) ->
+    return_response(Request, {error, Code}, State);
+handle_method(ChId, Request=#coap_message{method='post'}, _Resource, State) ->
+    handle_post(ChId, Request, State);
+handle_method(ChId, Request=#coap_message{method='put'}, Resource, State) ->
+    handle_put(ChId, Request, Resource, State);
+handle_method(ChId, Request=#coap_message{method='delete'}, _Resource, State) ->
     handle_delete(ChId, Request, State);
-handle_method(_ChId, Request, State) ->
+handle_method(_ChId, Request, _Resource, State) ->
     return_response(Request, {error, method_not_allowed}, State).
 
-handle_observe(ChId, Request=#coap_message{options=Options},
-        State=#state{prefix=Prefix, module=Module, resource={ok, _Content}, observer=undefined}) ->
+handle_observe(ChId, Request=#coap_message{options=Options}, Content=#coap_content{},
+        State=#state{prefix=Prefix, module=Module, observer=undefined}) ->
     % the first observe request from this user to this resource
     case invoke_callback(Module, coap_observe, [ChId, Prefix, uri_suffix(Prefix, Request)]) of
         ok ->
             Uri = proplists:get_value(uri_path, Options, []),
             pg2:create({coap_observer, Uri}),
             pg2:join({coap_observer, Uri}, self()),
-            return_resource(Request, State#state{observer=Request});
+            return_resource(Request, Content, State#state{observer=Request});
         {error, method_not_allowed} ->
             % observe is not supported, fallback to standard get
-            return_resource(Request, State#state{observer=undefined});
+            return_resource(Request, Content, State#state{observer=undefined});
         {error, Error} ->
             return_response(Request, {error, Error}, State)
     end;
-handle_observe(_ChId, Request, State=#state{resource={ok, _Content}}) ->
+handle_observe(_ChId, Request, Content=#coap_content{}, State) ->
     % subsequent observe request from the same user
-    return_resource(Request, State#state{observer=Request});
-handle_observe(_ChId, Request, State=#state{resource={error, Code}}) ->
+    return_resource(Request, Content, State#state{observer=Request});
+handle_observe(_ChId, Request, {error, Code}, State) ->
     return_response(Request, {error, Code}, State).
 
-handle_unobserve(ChId, Request=#coap_message{options=Options},
+handle_unobserve(ChId, Request=#coap_message{options=Options}, Resource=#coap_content{},
         State=#state{prefix=Prefix, module=Module}) ->
     invoke_callback(Module, coap_unobserve, [ChId, Prefix, uri_suffix(Prefix, Request)]),
     Uri = proplists:get_value(uri_path, Options, []),
@@ -181,20 +202,33 @@ handle_unobserve(ChId, Request=#coap_message{options=Options},
         [] -> pg2:delete({coap_observer, Uri});
         _Else -> ok
     end,
-    return_resource(Request, State#state{observer=undefined}).
+    return_resource(Request, Resource, State#state{observer=undefined});
+handle_unobserve(_ChId, Request=#coap_message{}, {error, Code}, State) ->
+    return_response(Request, {error, Code}, State).
 
-handle_put(ChId, Request, State=#state{prefix=Prefix, module=Module}) ->
-    case invoke_callback(Module, coap_put,
-            [ChId, Prefix, uri_suffix(Prefix, Request), coap_message:get_content(Request)]) of
-        ok ->
-            return_response(Request, created_or_changed(State), State);
+handle_post(ChId, Request, State=#state{prefix=Prefix, module=Module}) ->
+    Content = coap_message:get_content(Request),
+    case invoke_callback(Module, coap_post,
+            [ChId, Prefix, uri_suffix(Prefix, Request), Content]) of
+        {ok, Code, Content2} ->
+            return_resource(Request, {ok, Code}, Content2, State);
         {error, Error} ->
             return_response(Request, {error, Error}, State)
     end.
 
-created_or_changed(#state{resource={ok, _}}) ->
+handle_put(ChId, Request, Resource, State=#state{prefix=Prefix, module=Module}) ->
+    Content = coap_message:get_content(Request),
+    case invoke_callback(Module, coap_put,
+            [ChId, Prefix, uri_suffix(Prefix, Request), Content]) of
+        ok ->
+            return_response(Request, created_or_changed(Resource), State);
+        {error, Error} ->
+            return_response(Request, {error, Error}, State)
+    end.
+
+created_or_changed(#coap_content{}) ->
     {ok, changed};
-created_or_changed(#state{resource={error, not_found}}) ->
+created_or_changed({error, not_found}) ->
     {ok, created}.
 
 handle_delete(ChId, Request, State=#state{prefix=Prefix, module=Module}) ->
@@ -223,8 +257,10 @@ invoke_callback(Module, Fun, Args) ->
         {'EXIT', {undef, _}} -> {error, service_unavailable}
     end.
 
-return_resource(Request=#coap_message{options=Options},
-        State=#state{resource={ok, Content=#coap_content{etag=ETag}}}) ->
+return_resource(Request, Content, State) ->
+    return_resource(Request, {ok, content}, Content, State).
+
+return_resource(Request=#coap_message{options=Options}, {ok, Code}, Content=#coap_content{etag=ETag}, State) ->
     send_observable(Request,
         case lists:member(ETag, proplists:get_value(etag, Options, [])) of
             true ->
@@ -232,19 +268,11 @@ return_resource(Request=#coap_message{options=Options},
                     coap_message:response({ok, valid}, Request));
             false ->
                 coap_message:set_content(Content, proplists:get_value(block2, Options),
-                    coap_message:response({ok, content}, Request))
-        end, State);
-return_resource(Request, State=#state{resource={error, Error}}) ->
-    return_response(Request, {error, Error}, State).
+                    coap_message:response({ok, Code}, Request))
+        end, State#state{last_response={ok, Code, Content}}).
 
 return_response(Request, Code, State) ->
-    return_response(Request, Code, #coap_content{}, State).
-
-return_response(Request, Code, Content, State) ->
-    send_response(
-        coap_message:set_content(Content,
-            coap_message:response(Code, Request)),
-        State).
+    send_response(coap_message:response(Code, Request), State#state{last_response=Code}).
 
 send_observable(#coap_message{token=Token, options=Options}, Response,
         State=#state{observer=Observer, obseq=Seq}) ->
@@ -267,7 +295,7 @@ send_response(Response=#coap_message{options=Options},
             case proplists:get_value(block2, Options) of
                 {_, true, _} ->
                     % client is expected to ask for more blocks
-                    set_timeout(State, ?EXCHANGE_LIFETIME);
+                    set_timeout(?EXCHANGE_LIFETIME, State);
                 _Else ->
                     % no further communication concerning this request
                     {stop, normal, State}
@@ -284,9 +312,9 @@ next_seq(Seq) ->
         true -> 0
     end.
 
-set_timeout(State=#state{timer=undefined}, Timeout) ->
+set_timeout(Timeout, State=#state{timer=undefined}) ->
     set_timeout0(State, Timeout);
-set_timeout(State=#state{timer=Timer}, Timeout) ->
+set_timeout(Timeout, State=#state{timer=Timer}) ->
     erlang:cancel_timer(Timer),
     set_timeout0(State, Timeout).
 

@@ -9,7 +9,7 @@
 
 -module(blockwise_transfer_tests).
 
--export([coap_discover/2, coap_get/3, coap_post/4]).
+-export([coap_discover/2, coap_get/3, coap_post/4, coap_put/4]).
 -import(test_utils, [text_resource/1]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -20,12 +20,15 @@ coap_discover(Prefix, _Args) ->
 
 % resource generator
 coap_get(_ChId, [<<"text">>], [Size]) ->
-    {ok, text_resource(binary_to_integer(Size))};
+    text_resource(binary_to_integer(Size));
 coap_get(_ChId, [<<"reflect">>], []) ->
     {error, not_found}.
 
 coap_post(_ChId, _Prefix, [], Content) ->
     {ok, content, Content}.
+
+coap_put(_ChId, _Prefix, [], _Content) ->
+    ok.
 
 
 % fixture is my friend
@@ -50,9 +53,12 @@ blockwise_transfer(_State) ->
     ?_assertEqual({ok,content,text_resource(128)}, coap_client:request(get, "coap://127.0.0.1/text/128")),
     ?_assertEqual({ok,content,text_resource(1024)}, coap_client:request(get, "coap://127.0.0.1/text/1024")),
     ?_assertEqual({ok,content,text_resource(1984)}, coap_client:request(get, "coap://127.0.0.1/text/1984")),
-    ?_assertEqual({error,method_not_allowed}, coap_client:request(post, "coap://127.0.0.1/reflect", text_resource(128))),
-    ?_assertEqual({error,method_not_allowed}, coap_client:request(post, "coap://127.0.0.1/reflect", text_resource(1024))),
-    ?_assertEqual({error,method_not_allowed}, coap_client:request(post, "coap://127.0.0.1/reflect", text_resource(1984)))
+    ?_assertEqual({ok,created,#coap_content{}}, coap_client:request(put, "coap://127.0.0.1/reflect", text_resource(128))),
+    ?_assertEqual({ok,created,#coap_content{}}, coap_client:request(put, "coap://127.0.0.1/reflect", text_resource(1024))),
+    ?_assertEqual({ok,created,#coap_content{}}, coap_client:request(put, "coap://127.0.0.1/reflect", text_resource(1984))),
+    ?_assertEqual({ok,content,text_resource(128)}, coap_client:request(post, "coap://127.0.0.1/reflect", text_resource(128))),
+    ?_assertEqual({ok,content,text_resource(1024)}, coap_client:request(post, "coap://127.0.0.1/reflect", text_resource(1024))),
+    ?_assertEqual({ok,content,text_resource(1984)}, coap_client:request(post, "coap://127.0.0.1/reflect", text_resource(1984)))
     ].
 
 % end of file

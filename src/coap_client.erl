@@ -63,8 +63,9 @@ await_response(Channel, Method, ROpt, Ref, Content, Fragment) ->
             case proplists:get_value(block2, Options) of
                 {Num, true, Size} ->
                     % more blocks follow, ask for more
+                    % no payload for requests with Block2 with NUM != 0
                     {ok, Ref2} = coap_channel:send(Channel,
-                        coap_message:request(con, Method, Content, [{block2, {Num+1, false, Size}}|ROpt])),
+                        coap_message:request(con, Method, <<>>, [{block2, {Num+1, false, Size}}|ROpt])),
                     await_response(Channel, Method, ROpt, Ref2, Content, <<Fragment/binary, Data/binary>>);
                 _Else ->
                     % not segmented

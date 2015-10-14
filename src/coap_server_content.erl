@@ -26,9 +26,9 @@ start_link() ->
 
 coap_get(_ChId, _Prefix, []) ->
     Links = core_link:encode(get_links()),
-    {ok, #coap_content{etag = binary:part(crypto:hash(sha, Links), {0,4}),
-                        format = <<"application/link-format">>,
-                        payload = list_to_binary(Links)}};
+    #coap_content{etag = binary:part(crypto:hash(sha, Links), {0,4}),
+                  format = <<"application/link-format">>,
+                  payload = list_to_binary(Links)};
 coap_get(_ChId, _Prefix, _Else) ->
     {error, not_found}.
 

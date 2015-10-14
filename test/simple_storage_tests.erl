@@ -36,7 +36,7 @@ do_storage() ->
 
 handle({get, Name}, State) ->
     case ets:lookup(resources, Name) of
-        [{Name, Resource}] -> {ok, Resource, State};
+        [{Name, Resource}] -> {Resource, State};
         [] -> {error, not_found, State}
     end;
 handle({put, Name, Resource}, State) ->

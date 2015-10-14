@@ -23,15 +23,11 @@ coap_discover(Prefix, _Args) ->
 coap_get(_ChId, _Prefix, []) ->
     test_utils:send_command(get).
 
-coap_observe(_ChId, Prefix, []) ->
-    timer:apply_after(500, coap_responder, notify, [Prefix, {ok, text_resource(<<"2">>, 3000)}]),
-    ok.
+coap_observe(_ChId, _Prefix, []) -> ok.
+coap_unobserve(_ChId, _Prefix, []) -> ok.
 
-coap_unobserve(_ChId, _Prefix, []) ->
-    ok.
-
-coap_put(_ChId, _Prefix, [], Content) ->
-    test_utils:send_command({put, Content}).
+coap_put(_ChId, Prefix, [], Content) ->
+    test_utils:send_command({put, Prefix, Content}).
 
 % simple storage
 do_storage() ->
@@ -40,9 +36,10 @@ do_storage() ->
 handle(get, State) ->
     case State of
         undefined -> {error, not_found, State};
-        Resource -> {ok, Resource, State}
+        Resource -> {Resource, State}
     end;
-handle({put, Resource}, _State) ->
+handle({put, Prefix, Resource}, _State) ->
+    coap_responder:notify(Prefix, Resource),
     {ok, Resource}.
 
 
@@ -60,7 +57,11 @@ observe_test_() ->
         end,
         fun observe_test/1}.
 
-observe_and_wait(Uri) ->
+observe_and_modify(Uri, Resource) ->
+    timer:apply_after(500, coap_client, request, [put, Uri, Resource]),
+    observe(Uri).
+
+observe(Uri) ->
     case coap_observer:observe(Uri) of
         {ok, Pid, N1, Code1, Content1} ->
             % wait for one notification and then stop
@@ -77,13 +78,13 @@ observe_and_wait(Uri) ->
 observe_test(_State) ->
     [
     ?_assertEqual({error,not_found},
-        observe_and_wait("coap://127.0.0.1/text")),
+        observe("coap://127.0.0.1/text")),
     ?_assertEqual({ok, created, #coap_content{}},
         coap_client:request(put, "coap://127.0.0.1/text", text_resource(<<"1">>, 2000))),
     ?_assertEqual({{ok, pid, 0, content, text_resource(<<"1">>, 2000)},
             {coap_notify, pid, 1, {ok, content}, text_resource(<<"2">>, 3000)},
             {ok, content, text_resource(<<"2">>, 3000)}},
-        observe_and_wait("coap://127.0.0.1/text"))
+        observe_and_modify("coap://127.0.0.1/text", text_resource(<<"2">>, 3000)))
     ].
 
 % end of file

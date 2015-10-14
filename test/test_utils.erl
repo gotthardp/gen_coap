@@ -38,7 +38,7 @@ await_command(Module, State) ->
     end.
 
 text_resource(Size) ->
-    text_resource(<<>>, Size).
+    text_resource(undefined, Size).
 text_resource(ETag, Size) ->
     #coap_content{etag=ETag, format= <<"text/plain">>, payload=large_binary(Size, <<"X">>)}.
 
