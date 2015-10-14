@@ -9,7 +9,7 @@
 
 -module(observe_tests).
 
--export([coap_discover/2, coap_get/3, coap_observe/3, coap_put/4]).
+-export([coap_discover/2, coap_get/3, coap_observe/3, coap_unobserve/3, coap_put/4]).
 -export([do_storage/0, handle/2]).
 -import(test_utils, [text_resource/2]).
 
@@ -25,6 +25,9 @@ coap_get(_ChId, _Prefix, []) ->
 
 coap_observe(_ChId, Prefix, []) ->
     timer:apply_after(500, coap_responder, notify, [Prefix, {ok, text_resource(<<"2">>, 3000)}]),
+    ok.
+
+coap_unobserve(_ChId, _Prefix, []) ->
     ok.
 
 coap_put(_ChId, _Prefix, [], Content) ->
@@ -63,9 +66,9 @@ observe_and_wait(Uri) ->
             % wait for one notification and then stop
             receive
                 {coap_notify, Pid, N2, Code2, Content2} ->
-                    coap_observer:stop(Pid),
-                    {{ok, pid, N1, Code1, Content1},
-                     {coap_notify, pid, N2, Code2, Content2}}
+                    {{ok, pid, N1, Code1, Content1},            % answer to the observe request
+                     {coap_notify, pid, N2, Code2, Content2},   % notification
+                     coap_observer:stop(Pid)}                   % answer to the cancellation
             end;
         NotSubscribed ->
             NotSubscribed
@@ -78,7 +81,8 @@ observe_test(_State) ->
     ?_assertEqual({ok, created, #coap_content{}},
         coap_client:request(put, "coap://127.0.0.1/text", text_resource(<<"1">>, 2000))),
     ?_assertEqual({{ok, pid, 0, content, text_resource(<<"1">>, 2000)},
-            {coap_notify, pid, 1, {ok, content}, text_resource(<<"2">>, 3000)}},
+            {coap_notify, pid, 1, {ok, content}, text_resource(<<"2">>, 3000)},
+            {ok, content, text_resource(<<"2">>, 3000)}},
         observe_and_wait("coap://127.0.0.1/text"))
     ].
 

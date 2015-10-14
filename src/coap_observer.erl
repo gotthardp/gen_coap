@@ -37,7 +37,7 @@ observe(Uri, Options) ->
     end.
 
 stop(Pid) ->
-    gen_server:cast(Pid, shutdown).
+    gen_server:call(Pid, shutdown).
 
 
 init([Client, Uri, Options]) ->
@@ -50,11 +50,14 @@ init([Client, Uri, Options]) ->
         coap_message:request(con, get, <<>>, [{observe, 0}|ROpt])),
     {ok, #state{client=Client, sock=Sock, channel=Channel, ropt=ROpt, ref=Ref}}.
 
+handle_call(shutdown, _From, State=#state{channel=Channel, ropt=ROpt}) ->
+    {ok, Ref} = coap_channel:send(Channel,
+        coap_message:request(con, get, <<>>, [{observe, 1}|ROpt])),
+    Reply = coap_client:await_response(Channel, get, ROpt, Ref, #coap_content{}),
+    {stop, normal, Reply, State};
 handle_call(_Unknown, _From, State) ->
     {reply, unknown_call, State}.
 
-handle_cast(shutdown, State) ->
-    {stop, normal, State};
 handle_cast(Request, State) ->
     io:fwrite("coap_observer unknown cast ~p~n", [Request]),
     {noreply, State}.

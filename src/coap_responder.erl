@@ -133,8 +133,8 @@ handle_method(ChId, Request=#coap_message{method='get', options=Options}, State)
     case proplists:get_value(observe, Options) of
         0 ->
             handle_observe(ChId, Request, State);
-%        [1] ->
-%            handle0(Module, [coap_unsubscribe, coap_get], ChId, Channel, Prefix, Suffix, Message);
+        1 ->
+            handle_unobserve(ChId, Request, State);
         undefined ->
             return_resource(Request, State);
         _Else ->
@@ -151,7 +151,8 @@ handle_method(_ChId, Request, State) ->
     return_response(Request, {error, method_not_allowed}, State).
 
 handle_observe(ChId, Request=#coap_message{options=Options},
-        State=#state{prefix=Prefix, module=Module, resource={ok, _Content}}) ->
+        State=#state{prefix=Prefix, module=Module, resource={ok, _Content}, observer=undefined}) ->
+    % the first observe request from this user to this resource
     case invoke_callback(Module, coap_observe, [ChId, Prefix, uri_suffix(Prefix, Request)]) of
         ok ->
             Uri = proplists:get_value(uri_path, Options, []),
@@ -164,8 +165,23 @@ handle_observe(ChId, Request=#coap_message{options=Options},
         {error, Error} ->
             return_response(Request, {error, Error}, State)
     end;
+handle_observe(_ChId, Request, State=#state{resource={ok, _Content}}) ->
+    % subsequent observe request from the same user
+    return_resource(Request, State#state{observer=Request});
 handle_observe(_ChId, Request, State=#state{resource={error, Code}}) ->
     return_response(Request, {error, Code}, State).
+
+handle_unobserve(ChId, Request=#coap_message{options=Options},
+        State=#state{prefix=Prefix, module=Module}) ->
+    invoke_callback(Module, coap_unobserve, [ChId, Prefix, uri_suffix(Prefix, Request)]),
+    Uri = proplists:get_value(uri_path, Options, []),
+    pg2:leave({coap_observer, Uri}, self()),
+    % will the last observer to leave this group please turn out the lights
+    case pg2:get_members({coap_observer, Uri}) of
+        [] -> pg2:delete({coap_observer, Uri});
+        _Else -> ok
+    end,
+    return_resource(Request, State#state{observer=undefined}).
 
 handle_put(ChId, Request, State=#state{prefix=Prefix, module=Module}) ->
     case invoke_callback(Module, coap_put,

@@ -11,7 +11,7 @@
 -module(coap_client).
 
 -export([ping/1, request/2, request/3, request/4]).
--export([resolve_uri/1]).
+-export([resolve_uri/1, await_response/5]).
 
 -include("coap.hrl").
 
