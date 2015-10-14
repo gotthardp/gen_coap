@@ -49,6 +49,9 @@ response(Method, Payload, Request) ->
         set_payload(Payload,
             response(Request))).
 
+% omit option for its default value
+set(max_age, ?DEFAULT_MAX_AGE, Msg) -> Msg;
+% set non-default value
 set(Option, Value, Msg=#coap_message{options=Options}) ->
     Msg#coap_message{
         options=[{Option, Value}|Options]
@@ -76,6 +79,7 @@ get_content(#coap_message{options=Options, payload=Payload}) ->
                    [ETag] -> ETag;
                    _Other -> undefined
                end,
+        max_age = proplists:get_value(max_age, Options, ?DEFAULT_MAX_AGE),
         format = proplists:get_value(content_format, Options),
         payload = Payload}.
 
@@ -83,19 +87,21 @@ set_content(Content, Msg) ->
     set_content(Content, undefined, Msg).
 
 % segmentation not requested and not required
-set_content(#coap_content{etag=ETag, format=Format, payload=Payload}, undefined, Msg)
+set_content(#coap_content{etag=ETag, max_age=MaxAge, format=Format, payload=Payload}, undefined, Msg)
         when byte_size(Payload) =< ?MAX_BLOCK_SIZE ->
     set(etag, [ETag],
-        set(content_format, Format,
-            set_payload(Payload, Msg)));
+        set(max_age, MaxAge,
+            set(content_format, Format,
+                set_payload(Payload, Msg))));
 % segmentation not requested, but required (late negotiation)
 set_content(Content, undefined, Msg) ->
     set_content(Content, {0, true, ?MAX_BLOCK_SIZE}, Msg);
 % segmentation requested (early negotiation)
-set_content(#coap_content{etag=ETag, format=Format, payload=Payload}, Block, Msg) ->
+set_content(#coap_content{etag=ETag, max_age=MaxAge, format=Format, payload=Payload}, Block, Msg) ->
     set(etag, [ETag],
-        set(content_format, Format,
-            set_payload_block(Payload, Block, Msg))).
+        set(max_age, MaxAge,
+            set(content_format, Format,
+                set_payload_block(Payload, Block, Msg)))).
 
 set_payload_block(Content, Block, Msg=#coap_message{method=Method}) when is_atom(Method) ->
     set_payload_block(Content, block1, Block, Msg);
