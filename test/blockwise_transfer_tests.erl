@@ -8,8 +8,10 @@
 %
 
 -module(blockwise_transfer_tests).
+-behaviour(coap_resource).
 
--export([coap_discover/2, coap_get/3, coap_post/4, coap_put/4]).
+-export([coap_discover/2, coap_get/3, coap_post/4, coap_put/4, coap_delete/3,
+    coap_observe/3, coap_unobserve/3, handle_info/1]).
 -import(test_utils, [text_resource/1]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -30,14 +32,20 @@ coap_post(_ChId, _Prefix, [], Content) ->
 coap_put(_ChId, _Prefix, [], _Content) ->
     ok.
 
+coap_delete(_ChId, _Prefix, _Suffix) -> {error, method_not_allowed}.
+coap_observe(_ChId, _Prefix, _Suffix) -> {error, method_not_allowed}.
+coap_unobserve(_ChId, _Prefix, _Suffix) -> {error, method_not_allowed}.
+
+handle_info(_Message) -> ok.
+
 
 % fixture is my friend
 blockwise_transfer_test_() ->
     {setup,
         fun() ->
             application:start(gen_coap),
-            coap_server_content:add_handler([<<"text">>], ?MODULE, undefined),
-            coap_server_content:add_handler([<<"reflect">>], ?MODULE, undefined)
+            coap_server_registry:add_handler([<<"text">>], ?MODULE, undefined),
+            coap_server_registry:add_handler([<<"reflect">>], ?MODULE, undefined)
         end,
         fun(_State) ->
             application:stop(gen_coap)

@@ -8,8 +8,10 @@
 %
 
 -module(observe_tests).
+-behaviour(coap_resource).
 
--export([coap_discover/2, coap_get/3, coap_observe/3, coap_unobserve/3, coap_put/4]).
+-export([coap_discover/2, coap_get/3, coap_post/4, coap_put/4, coap_delete/3,
+    coap_observe/3, coap_unobserve/3, handle_info/1]).
 -export([do_storage/0, handle/2]).
 -import(test_utils, [text_resource/2]).
 
@@ -23,11 +25,19 @@ coap_discover(Prefix, _Args) ->
 coap_get(_ChId, _Prefix, []) ->
     test_utils:send_command(get).
 
-coap_observe(_ChId, _Prefix, []) -> ok.
-coap_unobserve(_ChId, _Prefix, []) -> ok.
+coap_post(_ChId, _Prefix, _Suffix, _Content) ->
+    {error, method_not_allowed}.
 
 coap_put(_ChId, Prefix, [], Content) ->
     test_utils:send_command({put, Prefix, Content}).
+
+coap_delete(_ChId, _Prefix, _Suffix) ->
+    {error, method_not_allowed}.
+
+coap_observe(_ChId, _Prefix, []) -> ok.
+coap_unobserve(_ChId, _Prefix, []) -> ok.
+
+handle_info(_Message) -> ok.
 
 % simple storage
 do_storage() ->
@@ -49,7 +59,7 @@ observe_test_() ->
         fun() ->
             register(storage, spawn(?MODULE, do_storage, [])),
             application:start(gen_coap),
-            coap_server_content:add_handler([<<"text">>], ?MODULE, undefined)
+            coap_server_registry:add_handler([<<"text">>], ?MODULE, undefined)
         end,
         fun(_State) ->
             application:stop(gen_coap),

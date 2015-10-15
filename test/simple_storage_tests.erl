@@ -8,8 +8,10 @@
 %
 
 -module(simple_storage_tests).
+-behaviour(coap_resource).
 
--export([coap_discover/2, coap_get/3, coap_put/4, coap_delete/3]).
+-export([coap_discover/2, coap_get/3, coap_post/4, coap_put/4, coap_delete/3,
+    coap_observe/3, coap_unobserve/3, handle_info/1]).
 -export([do_storage/0, handle/2]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -22,11 +24,19 @@ coap_discover(Prefix, _Args) ->
 coap_get(_ChId, _Prefix, [Name]) ->
     test_utils:send_command({get, Name}).
 
+coap_post(_ChId, _Prefix, _Suffix, _Content) ->
+    {error, method_not_allowed}.
+
 coap_put(_ChId, _Prefix, [Name], Content) ->
     test_utils:send_command({put, Name, Content}).
 
 coap_delete(_ChId, _Prefix, [Name]) ->
     test_utils:send_command({delete, Name}).
+
+coap_observe(_ChId, _Prefix, _Suffix) -> {error, method_not_allowed}.
+coap_unobserve(_ChId, _Prefix, _Suffix) -> {error, method_not_allowed}.
+
+handle_info(_Message) -> ok.
 
 % simple storage
 do_storage() ->
@@ -53,7 +63,7 @@ simple_storage_test_() ->
         fun() ->
             register(storage, spawn(?MODULE, do_storage, [])),
             application:start(gen_coap),
-            coap_server_content:add_handler([<<"storage">>], ?MODULE, undefined)
+            coap_server_registry:add_handler([<<"storage">>], ?MODULE, undefined)
         end,
         fun(_State) ->
             application:stop(gen_coap),

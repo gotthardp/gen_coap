@@ -32,8 +32,8 @@ stop(_Pid) ->
 
 init([InPort]) ->
     {ok, {{one_for_all, 3, 10}, [
-        {coap_server_content,
-            {coap_server_content, start_link, []},
+        {coap_server_registry,
+            {coap_server_registry, start_link, []},
             permanent, 5000, worker, []},
         {coap_channel_sup_sup,
             {coap_channel_sup_sup, start_link, []},

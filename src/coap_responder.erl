@@ -34,7 +34,7 @@ notify(Uri, Resource) ->
 
 init([Channel, Uri]) ->
     % the receiver will be determined based on the URI
-    case coap_server_content:get_handler(Uri) of
+    case coap_server_registry:get_handler(Uri) of
         {Prefix, Module, Args} ->
             Channel ! {responder_started},
             {ok, #state{channel=Channel, prefix=Prefix, module=Module, args=Args,
@@ -61,8 +61,8 @@ handle_info(cache_expired, State=#state{observer=undefined}) ->
 handle_info(cache_expired, State) ->
     % multi-block cache expired, but the observer is still active
     {noreply, State};
-handle_info(Info, State) ->
-    io:fwrite("responder unexpected ~p~n", [Info]),
+handle_info(Info, State=#state{module=Module}) ->
+    invoke_callback(Module, handle_info, [Info]),
     {noreply, State}.
 
 terminate(_Reason, #state{channel=Channel}) ->
@@ -240,21 +240,12 @@ handle_delete(ChId, Request, State=#state{prefix=Prefix, module=Module}) ->
     end.
 
 invoke_callback(Module, Fun, Args) ->
-    case catch Module:module_info(exports) of
-        Exports when is_list(Exports) ->
-            case lists:member({Fun, length(Args)}, Exports) of
-                true ->
-                    case catch apply(Module, Fun, Args) of
-                        {'EXIT', Error} ->
-                            error_logger:error_msg("~p", [Error]),
-                            {error, internal_server_error};
-                        Response ->
-                            Response
-                    end;
-                false ->
-                    {error, method_not_allowed}
-            end;
-        {'EXIT', {undef, _}} -> {error, service_unavailable}
+    case catch apply(Module, Fun, Args) of
+        {'EXIT', Error} ->
+            error_logger:error_msg("~p", [Error]),
+            {error, internal_server_error};
+        Response ->
+            Response
     end.
 
 return_resource(Request, Content, State) ->

@@ -11,7 +11,33 @@
 
 -include("coap.hrl").
 
--callback coap_get({inet:port_number(), inet:ip_address()},
-    [binary()], [binary()]) -> coap_content() | {'error', atom()}.
+% called when a client asks for .well-known/core resources
+-callback coap_discover([binary()], any()) ->
+    [coap_uri()].
+% GET handler
+-callback coap_get(coap_channel_id(), [binary()], [binary()]) ->
+    coap_content() | {'error', atom()}.
+% POST handler
+-callback coap_post(coap_channel_id(), [binary()], [binary()], coap_content()) ->
+    {'ok', atom(), coap_content()} | {'error', atom()}.
+% PUT handler
+-callback coap_put(coap_channel_id(), [binary()], [binary()], coap_content()) ->
+    'ok' | {'error', atom()}.
+% DELETE handler
+-callback coap_delete(coap_channel_id(), [binary()], [binary()]) ->
+    'ok' | {'error', atom()}.
+% observe request handler
+-callback coap_observe(coap_channel_id(), [binary()], [binary()]) ->
+    'ok' | {'error', atom()}.
+% cancellation request handler
+-callback coap_unobserve(coap_channel_id(), [binary()], [binary()]) ->
+    'ok' | {'error', atom()}.
+% handler for messages sent to the responder process
+-callback handle_info(any()) ->
+    'ok'.
+
+-type coap_channel_id() :: {inet:port_number(), inet:ip_address()}.
+-type coap_uri() :: {'absolute', [binary()], coap_uri_param()}.
+-type coap_uri_param() :: {atom(), binary()}.
 
 % end of file
