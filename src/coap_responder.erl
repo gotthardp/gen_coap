@@ -131,7 +131,9 @@ check_resource(ChId, Request, State=#state{prefix=Prefix, module=Module}) ->
         R2={error, not_found} ->
             check_preconditions(ChId, Request, R2, State);
         {error, Code} ->
-            return_response(Request, {error, Code}, State)
+            return_response(Request, {error, Code}, State);
+        {error, Code, Reason} ->
+            return_response(Request, {error, Code}, Reason, State)
     end.
 
 check_preconditions(ChId, Request, Resource, State) ->
@@ -192,7 +194,9 @@ handle_observe(ChId, Request=#coap_message{options=Options}, Content=#coap_conte
             % observe is not supported, fallback to standard get
             return_resource(Request, Content, State#state{observer=undefined});
         {error, Error} ->
-            return_response(Request, {error, Error}, State)
+            return_response(Request, {error, Error}, State);
+        {error, Error, Reason} ->
+            return_response(Request, {error, Error}, Reason, State)
     end;
 handle_observe(_ChId, Request, Content=#coap_content{}, State) ->
     % subsequent observe request from the same user
@@ -221,7 +225,9 @@ handle_post(ChId, Request, State=#state{prefix=Prefix, module=Module}) ->
         {ok, Code, Content2} ->
             return_resource(Request, {ok, Code}, Content2, State);
         {error, Error} ->
-            return_response(Request, {error, Error}, State)
+            return_response(Request, {error, Error}, State);
+        {error, Error, Reason} ->
+            return_response(Request, {error, Error}, Reason, State)
     end.
 
 handle_put(ChId, Request, Resource, State=#state{prefix=Prefix, module=Module}) ->
@@ -231,7 +237,9 @@ handle_put(ChId, Request, Resource, State=#state{prefix=Prefix, module=Module}) 
         ok ->
             return_response(Request, created_or_changed(Resource), State);
         {error, Error} ->
-            return_response(Request, {error, Error}, State)
+            return_response(Request, {error, Error}, State);
+        {error, Error, Reason} ->
+            return_response(Request, {error, Error}, Reason, State)
     end.
 
 created_or_changed(#coap_content{}) ->
@@ -244,7 +252,9 @@ handle_delete(ChId, Request, State=#state{prefix=Prefix, module=Module}) ->
         ok ->
             return_response(Request, {ok, deleted}, State);
         {error, Error} ->
-            return_response(Request, {error, Error}, State)
+            return_response(Request, {error, Error}, State);
+        {error, Error, Reason} ->
+            return_response(Request, {error, Error}, Reason, State)
     end.
 
 invoke_callback(Module, Fun, Args) ->
@@ -271,7 +281,10 @@ return_resource(Request=#coap_message{options=Options}, {ok, Code}, Content=#coa
         end, State#state{last_response={ok, Code, Content}}).
 
 return_response(Request, Code, State) ->
-    send_response(coap_message:response(Code, Request), State#state{last_response=Code}).
+    return_response(Request, Code, <<>>, State).
+
+return_response(Request, Code, Reason, State) ->
+    send_response(coap_message:response(Code, Reason, Request), State#state{last_response=Code}).
 
 send_observable(#coap_message{token=Token, options=Options}, Response,
         State=#state{observer=Observer, obseq=Seq}) ->

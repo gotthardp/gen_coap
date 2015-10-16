@@ -17,6 +17,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("gen_coap/include/coap.hrl").
 
+-define(NOT_IMPLEMENTED, <<"Not implemented">>).
+
 % resource operations
 coap_discover(Prefix, _Args) ->
     [{absolute, Prefix, []}].
@@ -25,7 +27,7 @@ coap_get(_ChId, _Prefix, [Name]) ->
     test_utils:send_command({get, Name}).
 
 coap_post(_ChId, _Prefix, _Suffix, _Content) ->
-    {error, method_not_allowed}.
+    {error, method_not_allowed, ?NOT_IMPLEMENTED}.
 
 coap_put(_ChId, _Prefix, [Name], Content) ->
     test_utils:send_command({put, Name, Content}).
@@ -77,6 +79,9 @@ simple_storage_test(_State) ->
 
     ?_assertEqual({error, not_found},
         coap_client:request(get, "coap://127.0.0.1/storage/one")),
+
+    ?_assertEqual({error, method_not_allowed, #coap_content{payload=?NOT_IMPLEMENTED}},
+        coap_client:request(post, "coap://127.0.0.1/storage/one", #coap_content{})),
 
     ?_assertEqual({ok, created, #coap_content{}},
         coap_client:request(put, "coap://127.0.0.1/storage/one",
