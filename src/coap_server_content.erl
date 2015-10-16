@@ -33,6 +33,6 @@ coap_delete(_ChId, _Prefix, _Suffix) -> {error, method_not_allowed}.
 coap_observe(_ChId, _Prefix, _Suffix) -> {error, method_not_allowed}.
 coap_unobserve(_State) -> ok.
 
-handle_info(_Message, State) -> {ok, State}.
+handle_info(_Message, State) -> {noreply, State}.
 
 % end of file

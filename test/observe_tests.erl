@@ -36,7 +36,7 @@ coap_delete(_ChId, _Prefix, _Suffix) ->
 
 coap_observe(_ChId, _Prefix, []) -> {ok, undefined}.
 coap_unobserve(_State) -> ok.
-handle_info(_Message, State) -> {ok, State}.
+handle_info(_Message, State) -> {noreply, State}.
 
 % simple storage
 do_storage() ->

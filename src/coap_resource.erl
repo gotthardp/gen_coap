@@ -36,7 +36,7 @@
     'ok'.
 % handler for messages sent to the responder process
 -callback handle_info(any(), any()) ->
-    {'ok', any()}.
+    {'notify', coap_content(), any()} | {'noreply', any()}.
 
 -type coap_channel_id() :: {inet:port_number(), inet:ip_address()}.
 -type coap_uri() :: {'absolute', [binary()], coap_uri_param()}.

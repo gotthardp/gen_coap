@@ -61,9 +61,16 @@ handle_info(cache_expired, State=#state{observer=undefined}) ->
 handle_info(cache_expired, State) ->
     % multi-block cache expired, but the observer is still active
     {noreply, State};
-handle_info(Info, State=#state{module=Module, obstate=ObState}) ->
+handle_info(_Info, State=#state{observer=undefined}) ->
+    {noreply, State};
+handle_info(Info, State=#state{module=Module, observer=Observer, obstate=ObState}) ->
     case invoke_callback(Module, handle_info, [Info, ObState]) of
-        {ok, ObState2} -> {noreply, State#state{obstate=ObState2}}
+        {notify, Resource=#coap_content{}, ObState2} ->
+            return_resource(Observer, Resource, State#state{obstate=ObState2});
+        {notify, {error, Code}, ObState2} ->
+            return_response(Observer, {error, Code}, State#state{obstate=ObState2});
+        {noreply, ObState2} ->
+            {noreply, State#state{obstate=ObState2}}
     end.
 
 terminate(_Reason, #state{channel=Channel}) ->
