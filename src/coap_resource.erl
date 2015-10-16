@@ -14,6 +14,7 @@
 % called when a client asks for .well-known/core resources
 -callback coap_discover([binary()], any()) ->
     [coap_uri()].
+
 % GET handler
 -callback coap_get(coap_channel_id(), [binary()], [binary()]) ->
     coap_content() | {'error', atom()}.
@@ -26,15 +27,16 @@
 % DELETE handler
 -callback coap_delete(coap_channel_id(), [binary()], [binary()]) ->
     'ok' | {'error', atom()}.
+
 % observe request handler
 -callback coap_observe(coap_channel_id(), [binary()], [binary()]) ->
-    'ok' | {'error', atom()}.
+    {'ok', any()} | {'error', atom()}.
 % cancellation request handler
--callback coap_unobserve(coap_channel_id(), [binary()], [binary()]) ->
-    'ok' | {'error', atom()}.
-% handler for messages sent to the responder process
--callback handle_info(any()) ->
+-callback coap_unobserve(any()) ->
     'ok'.
+% handler for messages sent to the responder process
+-callback handle_info(any(), any()) ->
+    {'ok', any()}.
 
 -type coap_channel_id() :: {inet:port_number(), inet:ip_address()}.
 -type coap_uri() :: {'absolute', [binary()], coap_uri_param()}.
