@@ -57,12 +57,6 @@ handle_cast({error, Code}, State=#state{observer=Observer}) ->
 handle_info({coap_request, ChId, _Channel, undefined, Request}, State) ->
     %io:fwrite("-> ~p~n", [Request]),
     handle(ChId, Request, State);
-handle_info(Ack={coap_ack, ChId, Channel, Ref}, State) ->
-    io:fwrite("ACK-> ~p~n", [Ack]),
-    {noreply, State};
-handle_info(Ack={coap_error, ChId, Channel, Ref, Error}, State) ->
-    io:fwrite("ERROR-> ~p~n", [Ack]),
-    {noreply, State};
 handle_info(cache_expired, State=#state{observer=undefined}) ->
     {stop, normal, State};
 handle_info(cache_expired, State) ->
@@ -70,12 +64,21 @@ handle_info(cache_expired, State) ->
     {noreply, State};
 handle_info(_Info, State=#state{observer=undefined}) ->
     {noreply, State};
+handle_info({coap_ack, _ChId, _Channel, Ref},
+        State=#state{module=Module, obstate=ObState}) ->
+    case invoke_callback(Module, coap_ack, [Ref, ObState]) of
+        {ok, ObState2} ->
+            {noreply, State#state{obstate=ObState2}}
+    end;
+handle_info({coap_error, _ChId, _Channel, _Ref, _Error}, State=#state{observer=Observer}) ->
+    {ok, State2} = cancel_observer(Observer, State),
+    {stop, normal, State2};
 handle_info(Info, State=#state{module=Module, observer=Observer, obstate=ObState}) ->
     case invoke_callback(Module, handle_info, [Info, ObState]) of
-        {notify, Resource=#coap_content{}, ObState2} ->
-            return_resource(Observer, Resource, State#state{obstate=ObState2});
-        {notify, {error, Code}, ObState2} ->
-            return_response(Observer, {error, Code}, State#state{obstate=ObState2});
+        {notify, Ref, Resource=#coap_content{}, ObState2} ->
+            return_resource(Ref, Observer, {ok, content}, Resource, State#state{obstate=ObState2});
+        {notify, Ref, {error, Code}, ObState2} ->
+            return_response(Ref, Observer, {error, Code}, <<>>, State#state{obstate=ObState2});
         {noreply, ObState2} ->
             {noreply, State#state{obstate=ObState2}}
     end.
@@ -96,7 +99,7 @@ handle(ChId, Request=#coap_message{options=Options}, State=#state{channel=Channe
         {error, Code} ->
             return_response(Request, {error, Code}, State);
         {continue, State2} ->
-            {ok, _Ref} = coap_channel:send(Channel,
+            {ok, _} = coap_channel:send_response(Channel, [],
                 coap_message:set(block1, Block1,
                     coap_message:response({ok, continue}, Request))),
             set_timeout(?EXCHANGE_LIFETIME, State2);
@@ -124,7 +127,7 @@ process_request(ChId, Request=#coap_message{options=Options},
         State=#state{last_response={ok, Code, Content}}) ->
     case proplists:get_value(block2, Options) of
         {N, _, _} when N > 0 ->
-            return_resource(Request, {ok, Code}, Content, State);
+            return_resource([], Request, {ok, Code}, Content, State);
         _Else ->
             check_resource(ChId, Request, State)
     end;
@@ -140,7 +143,7 @@ check_resource(ChId, Request, State=#state{prefix=Prefix, module=Module}) ->
         {error, Code} ->
             return_response(Request, {error, Code}, State);
         {error, Code, Reason} ->
-            return_response(Request, {error, Code}, Reason, State)
+            return_response([], Request, {error, Code}, Reason, State)
     end.
 
 check_preconditions(ChId, Request, Resource, State) ->
@@ -203,7 +206,7 @@ handle_observe(ChId, Request=#coap_message{options=Options}, Content=#coap_conte
         {error, Error} ->
             return_response(Request, {error, Error}, State);
         {error, Error, Reason} ->
-            return_response(Request, {error, Error}, Reason, State)
+            return_response([], Request, {error, Error}, Reason, State)
     end;
 handle_observe(_ChId, Request, Content=#coap_content{}, State) ->
     % subsequent observe request from the same user
@@ -211,8 +214,13 @@ handle_observe(_ChId, Request, Content=#coap_content{}, State) ->
 handle_observe(_ChId, Request, {error, Code}, State) ->
     return_response(Request, {error, Code}, State).
 
-handle_unobserve(_ChId, Request=#coap_message{options=Options}, Resource=#coap_content{},
-        State=#state{module=Module, obstate=ObState}) ->
+handle_unobserve(_ChId, Request, Resource=#coap_content{}, State) ->
+    {ok, State2} = cancel_observer(Request, State),
+    return_resource(Request, Resource, State2);
+handle_unobserve(_ChId, Request=#coap_message{}, {error, Code}, State) ->
+    return_response(Request, {error, Code}, State).
+
+cancel_observer(#coap_message{options=Options}, State=#state{module=Module, obstate=ObState}) ->
     ok = invoke_callback(Module, coap_unobserve, [ObState]),
     Uri = proplists:get_value(uri_path, Options, []),
     pg2:leave({coap_observer, Uri}, self()),
@@ -221,20 +229,18 @@ handle_unobserve(_ChId, Request=#coap_message{options=Options}, Resource=#coap_c
         [] -> pg2:delete({coap_observer, Uri});
         _Else -> ok
     end,
-    return_resource(Request, Resource, State#state{observer=undefined, obstate=undefined});
-handle_unobserve(_ChId, Request=#coap_message{}, {error, Code}, State) ->
-    return_response(Request, {error, Code}, State).
+    {ok, State#state{observer=undefined, obstate=undefined}}.
 
 handle_post(ChId, Request, State=#state{prefix=Prefix, module=Module}) ->
     Content = coap_message:get_content(Request),
     case invoke_callback(Module, coap_post,
             [ChId, Prefix, uri_suffix(Prefix, Request), Content]) of
         {ok, Code, Content2} ->
-            return_resource(Request, {ok, Code}, Content2, State);
+            return_resource([], Request, {ok, Code}, Content2, State);
         {error, Error} ->
             return_response(Request, {error, Error}, State);
         {error, Error, Reason} ->
-            return_response(Request, {error, Error}, Reason, State)
+            return_response([], Request, {error, Error}, Reason, State)
     end.
 
 handle_put(ChId, Request, Resource, State=#state{prefix=Prefix, module=Module}) ->
@@ -246,7 +252,7 @@ handle_put(ChId, Request, Resource, State=#state{prefix=Prefix, module=Module}) 
         {error, Error} ->
             return_response(Request, {error, Error}, State);
         {error, Error, Reason} ->
-            return_response(Request, {error, Error}, Reason, State)
+            return_response([], Request, {error, Error}, Reason, State)
     end.
 
 created_or_changed(#coap_content{}) ->
@@ -261,7 +267,7 @@ handle_delete(ChId, Request, State=#state{prefix=Prefix, module=Module}) ->
         {error, Error} ->
             return_response(Request, {error, Error}, State);
         {error, Error, Reason} ->
-            return_response(Request, {error, Error}, Reason, State)
+            return_response([], Request, {error, Error}, Reason, State)
     end.
 
 invoke_callback(Module, Fun, Args) ->
@@ -274,10 +280,10 @@ invoke_callback(Module, Fun, Args) ->
     end.
 
 return_resource(Request, Content, State) ->
-    return_resource(Request, {ok, content}, Content, State).
+    return_resource([], Request, {ok, content}, Content, State).
 
-return_resource(Request=#coap_message{options=Options}, {ok, Code}, Content=#coap_content{etag=ETag}, State) ->
-    send_observable(Request,
+return_resource(Ref, Request=#coap_message{options=Options}, {ok, Code}, Content=#coap_content{etag=ETag}, State) ->
+    send_observable(Ref, Request,
         case lists:member(ETag, proplists:get_value(etag, Options, [])) of
             true ->
                 coap_message:set_content(#coap_content{etag=ETag},
@@ -288,25 +294,25 @@ return_resource(Request=#coap_message{options=Options}, {ok, Code}, Content=#coa
         end, State#state{last_response={ok, Code, Content}}).
 
 return_response(Request, Code, State) ->
-    return_response(Request, Code, <<>>, State).
+    return_response([], Request, Code, <<>>, State).
 
-return_response(Request, Code, Reason, State) ->
-    send_response(coap_message:response(Code, Reason, Request), State#state{last_response=Code}).
+return_response(Ref, Request, Code, Reason, State) ->
+    send_response(Ref, coap_message:response(Code, Reason, Request), State#state{last_response=Code}).
 
-send_observable(#coap_message{token=Token, options=Options}, Response,
+send_observable(Ref, #coap_message{token=Token, options=Options}, Response,
         State=#state{observer=Observer, obseq=Seq}) ->
     case {proplists:get_value(observe, Options), Observer} of
         % when requested observe and is observing, return the sequence number
         {0, #coap_message{token=Token}} ->
-            send_response(coap_message:set(observe, Seq, Response), State#state{obseq=next_seq(Seq)});
+            send_response(Ref, coap_message:set(observe, Seq, Response), State#state{obseq=next_seq(Seq)});
         _Else ->
-            send_response(Response, State)
+            send_response(Ref, Response, State)
     end.
 
-send_response(Response=#coap_message{options=Options},
+send_response(Ref, Response=#coap_message{options=Options},
         State=#state{channel=Channel, observer=Observer}) ->
     %io:fwrite("<- ~p~n", [Response]),
-    coap_channel:send(Channel, Response),
+    coap_channel:send_response(Channel, Ref, Response),
     case Observer of
         #coap_message{} ->
             % notifications will follow

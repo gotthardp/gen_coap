@@ -35,8 +35,12 @@
 -callback coap_unobserve(any()) ->
     'ok'.
 % handler for messages sent to the responder process
+% used to generate notifications
 -callback handle_info(any(), any()) ->
-    {'notify', coap_content(), any()} | {'noreply', any()}.
+    {'notify', any(), coap_content(), any()} | {'noreply', any()} | {'stop', any()}.
+% response to notifications
+-callback coap_ack(any(), any()) ->
+    {'ok', any()}.
 
 -type coap_channel_id() :: {inet:port_number(), inet:ip_address()}.
 -type coap_uri() :: {'absolute', [binary()], coap_uri_param()}.

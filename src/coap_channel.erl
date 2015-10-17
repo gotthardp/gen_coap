@@ -27,22 +27,22 @@ start_link(SupPid, SockPid, ChId, ReSup) ->
     gen_server:start_link(?MODULE, [SupPid, SockPid, ChId, ReSup], []).
 
 ping(Channel) ->
-    send_message(Channel, #coap_message{type=con}, make_ref()).
+    send_message(Channel, make_ref(), #coap_message{type=con}).
 
 send(Channel, Message=#coap_message{type=Type, method=Method})
         when is_tuple(Method); Type==ack; Type==reset ->
-    send_response(Channel, Message, make_ref());
+    send_response(Channel, make_ref(), Message);
 send(Channel, Message=#coap_message{}) ->
-    send_request(Channel, Message, make_ref()).
+    send_request(Channel, make_ref(), Message).
 
-send_request(Pid, Message, Ref) ->
-    gen_server:cast(Pid, {send_request, Message, {self(), Ref}}),
+send_request(Channel, Ref, Message) ->
+    gen_server:cast(Channel, {send_request, Message, {self(), Ref}}),
     {ok, Ref}.
-send_message(Pid, Message, Ref) ->
-    gen_server:cast(Pid, {send_message, Message, {self(), Ref}}),
+send_message(Channel, Ref, Message) ->
+    gen_server:cast(Channel, {send_message, Message, {self(), Ref}}),
     {ok, Ref}.
-send_response(Pid, Message, Ref) ->
-    gen_server:cast(Pid, {send_response, Message, {self(), Ref}}),
+send_response(Channel, Ref, Message) ->
+    gen_server:cast(Channel, {send_response, Message, {self(), Ref}}),
     {ok, Ref}.
 
 close(Pid) ->
