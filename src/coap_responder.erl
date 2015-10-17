@@ -55,7 +55,14 @@ handle_cast({error, Code}, State=#state{observer=Observer}) ->
     return_response(Observer, {error, Code}, State).
 
 handle_info({coap_request, ChId, _Channel, undefined, Request}, State) ->
+    %io:fwrite("-> ~p~n", [Request]),
     handle(ChId, Request, State);
+handle_info(Ack={coap_ack, ChId, Channel, Ref}, State) ->
+    io:fwrite("ACK-> ~p~n", [Ack]),
+    {noreply, State};
+handle_info(Ack={coap_error, ChId, Channel, Ref, Error}, State) ->
+    io:fwrite("ERROR-> ~p~n", [Ack]),
+    {noreply, State};
 handle_info(cache_expired, State=#state{observer=undefined}) ->
     {stop, normal, State};
 handle_info(cache_expired, State) ->
@@ -298,6 +305,7 @@ send_observable(#coap_message{token=Token, options=Options}, Response,
 
 send_response(Response=#coap_message{options=Options},
         State=#state{channel=Channel, observer=Observer}) ->
+    %io:fwrite("<- ~p~n", [Response]),
     coap_channel:send(Channel, Response),
     case Observer of
         #coap_message{} ->

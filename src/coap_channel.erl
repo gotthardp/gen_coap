@@ -14,7 +14,7 @@
 
 -export([start_link/4]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
--export([ping/1, send/2, close/1]).
+-export([ping/1, send/2, send_request/3, send_message/3, send_response/3, close/1]).
 
 -define(VERSION, 1).
 -define(MAX_MESSAGE_ID, 65535). % 16-bit number

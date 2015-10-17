@@ -10,7 +10,7 @@
 % convenience functions for message construction
 -module(coap_message).
 
--export([request/2, request/3, request/4, response/1, response/2, response/3]).
+-export([request/2, request/3, request/4, ack/1, response/1, response/2, response/3]).
 -export([set/3, set_payload/2, get_content/1, set_content/2, set_content/3]).
 
 -include("coap.hrl").
@@ -27,6 +27,12 @@ request(Type, Method, Content=#coap_content{}, Options) ->
     set_content(Content,
         #coap_message{type=Type, method=Method, options=Options}).
 
+
+ack(Request=#coap_message{}) ->
+    #coap_message{
+        type=ack,
+        id=Request#coap_message.id
+    }.
 
 response(Request=#coap_message{type=non}) ->
     #coap_message{

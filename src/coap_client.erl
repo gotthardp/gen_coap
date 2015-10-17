@@ -10,7 +10,7 @@
 % convenience functions for building CoAP clients
 -module(coap_client).
 
--export([ping/1, request/2, request/3, request/4]).
+-export([ping/1, request/2, request/3, request/4, ack/2]).
 -export([resolve_uri/1, await_response/5]).
 
 -include("coap.hrl").
@@ -83,6 +83,11 @@ return_response({error, Code}, #coap_message{payload= <<>>}) ->
     {error, Code};
 return_response({error, Code}, Message) ->
     {error, Code, coap_message:get_content(Message)}.
+
+ack(Channel, Message) ->
+    coap_channel:send(Channel,
+        coap_message:ack(Message)).
+
 
 resolve_uri(Uri) ->
     {ok, {_Scheme, _UserInfo, Host, PortNo, Path, Query}} =

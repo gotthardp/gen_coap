@@ -62,19 +62,14 @@ handle_cast(Request, State) ->
     io:fwrite("coap_observer unknown cast ~p~n", [Request]),
     {noreply, State}.
 
-handle_info({coap_response, _ChId, Channel, Ref,
-        Message=#coap_message{method={ok, _Code}, options=Options, payload=Payload}},
+handle_info({coap_response, _ChId, Channel, Ref, Message=#coap_message{type=con}},
         State=#state{channel=Channel, ref=Ref}) ->
-    case proplists:get_value(block2, Options) of
-        {0, true, _Size} = Block2 ->
-            request_more_blocks(Message, Block2, Payload, State);
-        _Else ->
-            send_notify(Message, State)
-    end;
-handle_info({coap_response, _ChId, Channel, Ref, Message=#coap_message{method={error, Code}}},
-        State=#state{client=Client, channel=Channel, ref=Ref}) ->
-    Client ! {coap_notify, self(), undefined, {error, Code}, coap_message:get_content(Message)},
-    {stop, normal, State};
+    % response or notification arrived as a separate confirmable message
+    coap_client:ack(Channel, Message),
+    handle_response(Message, State);
+handle_info({coap_response, _ChId, Channel, Ref, Message},
+        State=#state{channel=Channel, ref=Ref}) ->
+    handle_response(Message, State);
 handle_info({coap_error, _ChId, Channel, Ref, reset},
         State=#state{client=Client, channel=Channel, ref=Ref}) ->
     Client ! {coap_notify, self(), undefined, {error, reset}, #coap_content{}},
@@ -91,6 +86,17 @@ terminate(_Reason, #state{sock=Sock, channel=Channel}) ->
     coap_udp_socket:close(Sock),
     ok.
 
+
+handle_response(Message=#coap_message{method={ok, _Code}, options=Options, payload=Payload}, State) ->
+    case proplists:get_value(block2, Options) of
+        {0, true, _Size} = Block2 ->
+            request_more_blocks(Message, Block2, Payload, State);
+        _Else ->
+            send_notify(Message, State)
+    end;
+handle_response(Message=#coap_message{method={error, Code}}, State=#state{client=Client}) ->
+    Client ! {coap_notify, self(), undefined, {error, Code}, coap_message:get_content(Message)},
+    {stop, normal, State}.
 
 request_more_blocks(Notify, {Num, true, Size}, Fragment,
         State=#state{client=Client, channel=Channel, ropt=ROpt}) ->
