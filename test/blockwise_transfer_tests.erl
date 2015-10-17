@@ -12,7 +12,7 @@
 
 -export([coap_discover/2, coap_get/3, coap_post/4, coap_put/4, coap_delete/3,
     coap_observe/3, coap_unobserve/1, handle_info/2]).
--import(test_utils, [text_resource/1]).
+-import(coap_test, [text_resource/1]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("gen_coap/include/coap.hrl").

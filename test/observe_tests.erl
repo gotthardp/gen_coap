@@ -13,7 +13,7 @@
 -export([coap_discover/2, coap_get/3, coap_post/4, coap_put/4, coap_delete/3,
     coap_observe/3, coap_unobserve/1, handle_info/2]).
 -export([do_storage/0, handle/2]).
--import(test_utils, [text_resource/2]).
+-import(coap_test, [text_resource/2]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("gen_coap/include/coap.hrl").
@@ -66,34 +66,16 @@ observe_test_() ->
         end,
         fun observe_test/1}.
 
-observe_and_modify(Uri, Resource) ->
-    timer:apply_after(500, coap_client, request, [put, Uri, Resource]),
-    observe(Uri).
-
-observe(Uri) ->
-    case coap_observer:observe(Uri) of
-        {ok, Pid, N1, Code1, Content1} ->
-            % wait for one notification and then stop
-            receive
-                {coap_notify, Pid, N2, Code2, Content2} ->
-                    {{ok, pid, N1, Code1, Content1},            % answer to the observe request
-                     {coap_notify, pid, N2, Code2, Content2},   % notification
-                     coap_observer:stop(Pid)}                   % answer to the cancellation
-            end;
-        NotSubscribed ->
-            NotSubscribed
-    end.
-
 observe_test(_State) ->
     [
     ?_assertEqual({error,not_found},
-        observe("coap://127.0.0.1/text")),
+        coap_test:observe("coap://127.0.0.1/text")),
     ?_assertEqual({ok, created, #coap_content{}},
         coap_client:request(put, "coap://127.0.0.1/text", text_resource(<<"1">>, 2000))),
     ?_assertEqual({{ok, pid, 0, content, text_resource(<<"1">>, 2000)},
             {coap_notify, pid, 1, {ok, content}, text_resource(<<"2">>, 3000)},
             {ok, content, text_resource(<<"2">>, 3000)}},
-        observe_and_modify("coap://127.0.0.1/text", text_resource(<<"2">>, 3000)))
+        coap_test:observe_and_modify("coap://127.0.0.1/text", text_resource(<<"2">>, 3000)))
     ].
 
 % end of file
