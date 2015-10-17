@@ -41,11 +41,11 @@ stop(Pid) ->
 
 
 init([Client, Uri, Options]) ->
-    {ChId, Path} = coap_client:resolve_uri(Uri),
+    {ChId, Path, Query} = coap_client:resolve_uri(Uri),
     {ok, Sock} = coap_udp_socket:start_link(),
     {ok, Channel} = coap_udp_socket:get_channel(Sock, ChId),
     % observe the resource
-    ROpt = [{uri_path, Path}|Options],
+    ROpt = [{uri_path, Path}, {uri_query, Query}|Options],
     {ok, Ref} = coap_channel:send(Channel,
         coap_message:request(con, get, <<>>, [{observe, 0}|ROpt])),
     {ok, #state{client=Client, sock=Sock, channel=Channel, ropt=ROpt, ref=Ref}}.

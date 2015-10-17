@@ -16,7 +16,7 @@
 -include("coap.hrl").
 
 ping(Uri) ->
-    {ChId, _Path} = resolve_uri(Uri),
+    {ChId, _Path, _Query} = resolve_uri(Uri),
     channel_apply(ChId,
         fun(Channel) ->
             {ok, Ref} = coap_channel:ping(Channel),
@@ -33,10 +33,10 @@ request(Method, Uri, Content) ->
     request(Method, Uri, Content, []).
 
 request(Method, Uri, Content, Options) ->
-    {ChId, Path} = resolve_uri(Uri),
+    {ChId, Path, Query} = resolve_uri(Uri),
     channel_apply(ChId,
         fun(Channel) ->
-            request_block(Channel, Method, [{uri_path, Path} | Options], Content)
+            request_block(Channel, Method, [{uri_path, Path}, {uri_query, Query} | Options], Content)
         end).
 
 request_block(Channel, Method, ROpt, Content) ->
@@ -85,14 +85,29 @@ return_response({error, Code}, Message) ->
     {error, Code, coap_message:get_content(Message)}.
 
 resolve_uri(Uri) ->
-    {ok, {_Scheme, _UserInfo, Host, PortNo, Path, _Query}} =
+    {ok, {_Scheme, _UserInfo, Host, PortNo, Path, Query}} =
         http_uri:parse(Uri, [{scheme_defaults, [{coap, 5683}]}]),
     {ok, PeerIP} = inet:getaddr(Host, inet),
-    {{PeerIP, PortNo}, split_path(Path)}.
+    {{PeerIP, PortNo}, split_path(Path), split_query(Query)}.
 
 split_path([]) -> [];
 split_path([$/]) -> [];
-split_path([$/ | Path]) -> binary:split(list_to_binary(Path), [<<$/>>], [global]).
+split_path([$/ | Path]) -> split_segments(Path, $/, []).
+
+split_query([]) -> [];
+split_query([$? | Path]) -> split_segments(Path, $&, []).
+
+split_segments(Path, Char, Acc) ->
+    case string:rchr(Path, Char) of
+        0 ->
+            [make_segment(Path) | Acc];
+        N when N > 0 ->
+            split_segments(string:substr(Path, 1, N-1), Char,
+                [make_segment(string:substr(Path, N+1)) | Acc])
+    end.
+
+make_segment(Seg) ->
+    list_to_binary(http_uri:decode(Seg)).
 
 channel_apply(ChId, Fun) ->
     {ok, Sock} = coap_udp_socket:start_link(),
@@ -103,5 +118,27 @@ channel_apply(ChId, Fun) ->
     coap_channel:close(Channel),
     coap_udp_socket:close(Sock),
     Res.
+
+-include_lib("eunit/include/eunit.hrl").
+
+% note that the options below must be sorted by the option numbers
+resolver_test_()-> [
+    ?_assertEqual({{{127,0,0,1},5683},[], []}, resolve_uri("coap://localhost")),
+    ?_assertEqual({{{127,0,0,1},1234},[], []}, resolve_uri("coap://localhost:1234")),
+    ?_assertEqual({{{127,0,0,1},5683},[], []}, resolve_uri("coap://localhost/")),
+    ?_assertEqual({{{127,0,0,1},1234},[], []}, resolve_uri("coap://localhost:1234/")),
+    ?_assertEqual({{{127,0,0,1},5683},[<<"/">>], []}, resolve_uri("coap://localhost/%2F")),
+    % from RFC 7252, Section 6.3
+    % the following three URIs are equivalent
+    ?_assertEqual({{{127,0,0,1},5683},[<<"~sensors">>, <<"temp.xml">>], []},
+        resolve_uri("coap://localhost:5683/~sensors/temp.xml")),
+    ?_assertEqual({{{127,0,0,1},5683},[<<"~sensors">>, <<"temp.xml">>], []},
+        resolve_uri("coap://LOCALHOST/%7Esensors/temp.xml")),
+    ?_assertEqual({{{127,0,0,1},5683},[<<"~sensors">>, <<"temp.xml">>], []},
+        resolve_uri("coap://LOCALHOST/%7esensors/temp.xml")),
+    % from RFC 7252, Appendix B
+    ?_assertEqual({{{127,0,0,1},61616},[<<>>, <<"/">>, <<>>, <<>>], [<<"//">>,<<"?&">>]},
+        resolve_uri("coap://localhost:61616//%2F//?%2F%2F&?%26"))
+    ].
 
 % end of file

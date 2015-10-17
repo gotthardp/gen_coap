@@ -44,7 +44,6 @@ empty_server(_State) ->
     ?_assertEqual(ok, coap_client:ping("coap://127.0.0.1")),
     % discovery
     ?_assertEqual({error, not_found}, coap_client:request(get, "coap://127.0.0.1")),
-    ?_assertEqual({error, not_found}, coap_client:request(get, "coap://127.0.0.1/")),
     ?_assertEqual({error, not_found}, coap_client:request(get, "coap://127.0.0.1/.well-known")),
     ?_assertMatch({ok, content, #coap_content{payload= <<>>}}, coap_client:request(get, "coap://127.0.0.1/.well-known/core")),
     % other methods
