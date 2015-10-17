@@ -36,15 +36,18 @@ some server resources you need to build and register a custom handler.
 ```erlang
 coap_server_content:add_handler(["prefix"], custom_handler, Args)
 ```
-The custom handler should implement one or more callbacks that the server invokes
-upon reception of a CoAP request. All callbacks are optional.
+The custom handler should implement the `coap_resource` behaviour, which includes
+following callbacks that the server invokes upon reception of a CoAP request.
  - `coap_discover` is called when a CoAP client asks for the list of
    ".well-known/core" resources. The function shall return a list of resources
    with a given *Prefix*.
  - `coap_get`, `coap_post`, `coap_put` or `coap_delete` is called when the server
    receives a GET, POST, PUT or DELETE request for a resource *Prefix*/*Suffix*.
- - `coap_subscribe` or `coap_unsubscribe` is called upon a GET request with an
+ - `coap_observe` or `coap_unobserve` is called upon a GET request with an
    Observe=0 or Observe=1 option for a resource *Prefix*/*Suffix*.
+ - The observe handler may receive messages from some process via the `handle_info`
+   callback, generate notifications and then get notified by `coap_ack` once the
+   notification is acknowledged by the observer.
 
 The architecture looks as follows:
 ![GitHub Logo](https://rawgit.com/gotthardp/gen_coap/master/doc/architecture.svg)

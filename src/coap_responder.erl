@@ -80,7 +80,10 @@ handle_info(Info, State=#state{module=Module, observer=Observer, obstate=ObState
         {notify, Ref, {error, Code}, ObState2} ->
             return_response(Ref, Observer, {error, Code}, <<>>, State#state{obstate=ObState2});
         {noreply, ObState2} ->
-            {noreply, State#state{obstate=ObState2}}
+            {noreply, State#state{obstate=ObState2}};
+        {stop, ObState2} ->
+            {ok, State2} = cancel_observer(Observer, State#state{obstate=ObState2}),
+            return_response(Observer, {error, service_unavailable}, State2)
     end.
 
 terminate(_Reason, #state{channel=Channel}) ->
