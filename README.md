@@ -14,28 +14,62 @@ Tested with the following CoAP implementations:
 Used in the following applications:
  - [CoAP Publish-Subscribe interface to RabbitMQ](https://github.com/gotthardp/rabbitmq-coap-pubsub)
 
-The API may change without notice and some functions may not be implemented.
-Please [add an Issue](https://github.com/gotthardp/gen_coap/issues/new)
+Let me know if you (intend to) use *gen_coap*. The API may change and some
+functions may not be implemented. Please
+[add an Issue](https://github.com/gotthardp/gen_coap/issues/new)
 if you find a bug or miss a feature.
 
 
 ## Usage
+*gen_coap* enables you to integrate a CoAP server and/or CoAP client with
+your application. For demonstration purposes it also includes a simple CoAP
+client and server implemented using [escript](http://www.erlang.org/doc/man/escript.html).
+
 [![Build Status](https://travis-ci.org/gotthardp/gen_coap.svg?branch=master)](https://travis-ci.org/gotthardp/gen_coap)
 
 ### Client
-Get a resource by:
+Have a look at [coap-client.sh](coap-client.sh). It implements a simple
+command line utility for manipulation and observation of CoAP resources. It
+shall demonstrate the use of the `coap_client` and `coap_observer` modules.
+The tool accepts the following arguments:
+
+ Argument      | Description
+---------------|---------------
+ -m *Method*   | request method (get|put|post|delete), default is 'get'
+ -e *Text*     | include text as payload
+ -s *Duration* | subscribe for given duration [seconds]
+ *Uri*         | coap:// URI identifying the resource
+
+Run the example simply by:
+
+    $ ./coap-client.sh coap://127.0.0.1/.well-known/core
+    $ ./coap-client.sh coap://127.0.0.1/resource
+    $ ./coap-client.sh coap://127.0.0.1/resource -s 1000
+    $ ./coap-client.sh -m put coap://127.0.0.1/resource -e data
+    $ ./coap-client.sh -m delete coap://127.0.0.1/resource
+
+In an erlang progrem you can get a CoAP resource by:
 ```erlang
 {ok, content, Data} = coap_client:request(get, "coap://coap.me:5683")
 ```
-No application need to be started.
-
-Then, you can invoke the client and access the server resources:
-
-    $ ./coap-client coap://127.0.0.1/.well-known/core
+No application need to be started to use the client.
 
 ### Server
-The server out of a box does not offer any resources. To offer CoAP access to
-some server resources you need to implement the `coap_resource` behaviour,
+Have a look at [coap-server.sh](coap-server.sh). It implements a simple
+resource storage, which can be accessed using CoAP. It shall demonstrate the
+use of the `coap_server_registry` and `coap_responder` modules. The entire
+server is implemented using [escript](http://www.erlang.org/doc/man/escript.html)
+and requires no arguments. Run the example simply by:
+
+    $ ./coap-server.sh
+
+You can manually start the server from the Erlang command line by:
+
+    $ erl -pa ebin
+    1> application:start(gen_coap).
+
+However, the server out of a box does not offer any resources. To offer CoAP access
+to some server resources you need to implement the `coap_resource` behaviour,
 which defines callbacks that the server invokes upon reception of a CoAP request.
  - `coap_discover` is called when a CoAP client asks for the list of
    ".well-known/core" resources.
@@ -44,12 +78,7 @@ which defines callbacks that the server invokes upon reception of a CoAP request
  - `coap_observe` or `coap_unobserve` is called upon a GET request with an
    Observe=0 or Observe=1 option.
 
-You can also start the server from command line:
+### Architecture
 
-    $ erl -pa ebin
-    1> application:start(gen_coap).
-
-### Design
-
-The architecture looks as follows:
+The following picture shows the `gen_coap` modules are their relationships:
 ![GitHub Logo](https://rawgit.com/gotthardp/gen_coap/master/doc/architecture.svg)
