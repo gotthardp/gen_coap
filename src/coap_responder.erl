@@ -52,7 +52,8 @@ handle_cast(_Resource, State=#state{observer=undefined}) ->
 handle_cast(Resource=#coap_content{}, State=#state{observer=Observer}) ->
     return_resource(Observer, Resource, State);
 handle_cast({error, Code}, State=#state{observer=Observer}) ->
-    return_response(Observer, {error, Code}, State).
+    {ok, State2} = cancel_observer(Observer, State),
+    return_response(Observer, {error, Code}, State2).
 
 handle_info({coap_request, ChId, _Channel, undefined, Request}, State) ->
     %io:fwrite("-> ~p~n", [Request]),
