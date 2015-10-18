@@ -48,7 +48,7 @@ Run the example simply by:
     $ ./coap-client.sh -m put coap://127.0.0.1/resource -e data
     $ ./coap-client.sh -m delete coap://127.0.0.1/resource
 
-In an erlang progrem you can get a CoAP resource by:
+In an erlang program you can get a CoAP resource by:
 ```erlang
 {ok, content, Data} = coap_client:request(get, "coap://coap.me:5683")
 ```
@@ -59,7 +59,8 @@ Have a look at [coap-server.sh](coap-server.sh). It implements a simple
 resource storage, which can be accessed using CoAP. It shall demonstrate the
 use of the `coap_server_registry` and `coap_responder` modules. The entire
 server is implemented using [escript](http://www.erlang.org/doc/man/escript.html)
-and requires no arguments. Run the example simply by:
+and requires no arguments. Run the sample server as follows and then access
+it using any CoAP client (or the *gen_coap* sample client tool):
 
     $ ./coap-server.sh
 
