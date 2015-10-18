@@ -197,11 +197,11 @@ handle_method(_ChId, Request, _Resource, State) ->
 handle_observe(ChId, Request=#coap_message{options=Options}, Content=#coap_content{},
         State=#state{prefix=Prefix, module=Module, observer=undefined}) ->
     % the first observe request from this user to this resource
-    case invoke_callback(Module, coap_observe, [ChId, Prefix, uri_suffix(Prefix, Request)]) of
+    case invoke_callback(Module, coap_observe, [ChId, Prefix, uri_suffix(Prefix, Request), requires_ack(Request)]) of
         {ok, ObState} ->
             Uri = proplists:get_value(uri_path, Options, []),
             pg2:create({coap_observer, Uri}),
-            pg2:join({coap_observer, Uri}, self()),
+            ok = pg2:join({coap_observer, Uri}, self()),
             return_resource(Request, Content, State#state{observer=Request, obstate=ObState});
         {error, method_not_allowed} ->
             % observe is not supported, fallback to standard get
@@ -211,22 +211,21 @@ handle_observe(ChId, Request=#coap_message{options=Options}, Content=#coap_conte
         {error, Error, Reason} ->
             return_response([], Request, {error, Error}, Reason, State)
     end;
-handle_observe(_ChId, Request, Content=#coap_content{}, State) ->
+handle_observe(_ChId, Request, Content, State) ->
     % subsequent observe request from the same user
-    return_resource(Request, Content, State#state{observer=Request});
-handle_observe(_ChId, Request, {error, Code}, State) ->
-    return_response(Request, {error, Code}, State).
+    return_resource(Request, Content, State#state{observer=Request}).
 
-handle_unobserve(_ChId, Request, Resource=#coap_content{}, State) ->
+requires_ack(#coap_message{type=con}) -> true;
+requires_ack(#coap_message{type=non}) -> false.
+
+handle_unobserve(_ChId, Request, Resource, State) ->
     {ok, State2} = cancel_observer(Request, State),
-    return_resource(Request, Resource, State2);
-handle_unobserve(_ChId, Request=#coap_message{}, {error, Code}, State) ->
-    return_response(Request, {error, Code}, State).
+    return_resource(Request, Resource, State2).
 
 cancel_observer(#coap_message{options=Options}, State=#state{module=Module, obstate=ObState}) ->
     ok = invoke_callback(Module, coap_unobserve, [ObState]),
     Uri = proplists:get_value(uri_path, Options, []),
-    pg2:leave({coap_observer, Uri}, self()),
+    ok = pg2:leave({coap_observer, Uri}, self()),
     % will the last observer to leave this group please turn out the lights
     case pg2:get_members({coap_observer, Uri}) of
         [] -> pg2:delete({coap_observer, Uri});
@@ -315,7 +314,7 @@ send_observable(Ref, #coap_message{token=Token, options=Options}, Response,
 send_response(Ref, Response=#coap_message{options=Options},
         State=#state{channel=Channel, observer=Observer}) ->
     %io:fwrite("<- ~p~n", [Response]),
-    coap_channel:send_response(Channel, Ref, Response),
+    {ok, _} = coap_channel:send_response(Channel, Ref, Response),
     case Observer of
         #coap_message{} ->
             % notifications will follow
@@ -344,7 +343,7 @@ next_seq(Seq) ->
 set_timeout(Timeout, State=#state{timer=undefined}) ->
     set_timeout0(State, Timeout);
 set_timeout(Timeout, State=#state{timer=Timer}) ->
-    erlang:cancel_timer(Timer),
+    _ = erlang:cancel_timer(Timer),
     set_timeout0(State, Timeout).
 
 set_timeout0(State, Timeout) ->

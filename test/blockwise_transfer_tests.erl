@@ -11,7 +11,7 @@
 -behaviour(coap_resource).
 
 -export([coap_discover/2, coap_get/3, coap_post/4, coap_put/4, coap_delete/3,
-    coap_observe/3, coap_unobserve/1, handle_info/2, coap_ack/2]).
+    coap_observe/4, coap_unobserve/1, handle_info/2, coap_ack/2]).
 -import(coap_test, [text_resource/1]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -34,7 +34,7 @@ coap_put(_ChId, _Prefix, [], _Content) ->
 
 coap_delete(_ChId, _Prefix, _Suffix) -> {error, method_not_allowed}.
 
-coap_observe(_ChId, _Prefix, _Suffix) -> {error, method_not_allowed}.
+coap_observe(_ChId, _Prefix, _Suffix, _Ack) -> {error, method_not_allowed}.
 coap_unobserve(_State) -> ok.
 handle_info(_Message, State) -> {noreply, State}.
 coap_ack(_Ref, State) -> {ok, State}.

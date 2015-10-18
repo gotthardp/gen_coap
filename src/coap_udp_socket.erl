@@ -97,7 +97,7 @@ handle_info({udp, _Socket, PeerIP, PeerPortNo, Data}, State=#state{chans=Chans, 
             {noreply, State}
     end;
 handle_info({datagram, {PeerIP, PeerPortNo}, Data}, State=#state{sock=Socket}) ->
-    gen_udp:send(Socket, PeerIP, PeerPortNo, Data),
+    ok = gen_udp:send(Socket, PeerIP, PeerPortNo, Data),
     {noreply, State};
 handle_info({terminated, SupPid, ChId}, State=#state{chans=Chans}) ->
     Chans2 = dict:erase(ChId, Chans),

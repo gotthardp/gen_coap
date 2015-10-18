@@ -65,7 +65,7 @@ handle_cast(Request, State) ->
 handle_info({coap_response, _ChId, Channel, Ref, Message=#coap_message{type=con}},
         State=#state{channel=Channel, ref=Ref}) ->
     % response or notification arrived as a separate confirmable message
-    coap_client:ack(Channel, Message),
+    {ok, _} = coap_client:ack(Channel, Message),
     handle_response(Message, State);
 handle_info({coap_response, _ChId, Channel, Ref, Message},
         State=#state{channel=Channel, ref=Ref}) ->

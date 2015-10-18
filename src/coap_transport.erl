@@ -109,7 +109,8 @@ in_con({in, BinMessage}, State=#state{channel=Channel}) ->
     case Message of
         #coap_message{method=undefined, id=MsgId} ->
             % provoked reset
-            coap_channel:send(Channel, #coap_message{type=reset, id=MsgId});
+            {ok, _} = coap_channel:send(Channel, #coap_message{type=reset, id=MsgId}),
+            ok;
         #coap_message{method=Method} when is_atom(Method) ->
             handle_request(Message, State);
         #coap_message{} ->
@@ -148,7 +149,7 @@ out_con({out, Message}, State=#state{sock=Sock, cid=ChId}) ->
     %io:fwrite("~p, <= ~p~n", [self(), Message]),
     BinMessage = coap_message_parser:encode(Message),
     Sock ! {datagram, ChId, BinMessage},
-    random:seed(os:timestamp()),
+    _ = random:seed(os:timestamp()),
     Timeout = ?ACK_TIMEOUT+random:uniform(?ACK_RANDOM_FACTOR),
     next_state(await_pack, State#state{msg=Message, retry_time=Timeout, retry_count=0}, Timeout).
 
@@ -187,13 +188,16 @@ timeout_after(Time, Channel, TrId, Event) ->
 handle_request(Message, #state{cid=ChId, channel=Channel, resp=ReSup, receiver=undefined}) ->
     case coap_responder_sup:get_responder(ReSup, Message) of
         {ok, Pid} ->
-            Pid ! {coap_request, ChId, Channel, undefined, Message};
+            Pid ! {coap_request, ChId, Channel, undefined, Message},
+            ok;
         {error, {not_found, _}} ->
-            coap_channel:send(Channel,
-                coap_message:response({error, not_found}, Message))
+            {ok, _} = coap_channel:send(Channel,
+                coap_message:response({error, not_found}, Message)),
+            ok
     end;
 handle_request(Message, #state{cid=ChId, channel=Channel, receiver={Sender, Ref}}) ->
-    Sender ! {coap_request, ChId, Channel, Ref, Message}.
+    Sender ! {coap_request, ChId, Channel, Ref, Message},
+    ok.
 
 handle_response(Message, #state{cid=ChId, channel=Channel, receiver={Sender, Ref}}) ->
     Sender ! {coap_response, ChId, Channel, Ref, Message},
@@ -204,12 +208,16 @@ handle_error(Message, Error, #state{cid=ChId, channel=Channel, receiver={Sender,
     request_complete(Channel, Message).
 
 handle_ack(_Message, #state{cid=ChId, channel=Channel, receiver={Sender, Ref}}) ->
-    Sender ! {coap_ack, ChId, Channel, Ref}.
+    Sender ! {coap_ack, ChId, Channel, Ref},
+    ok.
 
 request_complete(Channel, #coap_message{token=Token, options=Options}) ->
     case proplists:get_value(observe, Options, []) of
-        [] -> Channel ! {request_complete, Token};
-        _Else -> ok
+        [] ->
+            Channel ! {request_complete, Token},
+            ok;
+        _Else ->
+            ok
     end.
 
 % start the timer
@@ -218,7 +226,7 @@ next_state(Phase, State=#state{channel=Channel, tid=TrId, timer=undefined}, Time
     State#state{phase=Phase, timer=Timer};
 % restart the timer
 next_state(Phase, State=#state{channel=Channel, tid=TrId, timer=Timer1}, Timeout) ->
-    erlang:cancel_timer(Timer1),
+    _ = erlang:cancel_timer(Timer1),
     Timer2 = timeout_after(Timeout, Channel, TrId, Phase),
     State#state{phase=Phase, timer=Timer2}.
 
@@ -227,9 +235,12 @@ next_state(Phase, State=#state{timer=undefined}) ->
 next_state(Phase, State=#state{phase=Phase1, timer=Timer}) ->
     if
         % when going to another phase, the timer is cancelled
-        Phase /= Phase1 -> erlang:cancel_timer(Timer);
+        Phase /= Phase1 ->
+            _ = erlang:cancel_timer(Timer),
+            ok;
         % when staying in current phase, the timer continues
-        true -> ok
+        true ->
+            ok
     end,
     State#state{phase=Phase, timer=undefined}.
 

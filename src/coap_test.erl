@@ -24,7 +24,7 @@ large_binary(Size, Acc) ->
     <<Acc/binary, Sup/binary>>.
 
 observe_and_modify(Uri, Resource) ->
-    timer:apply_after(500, coap_client, request, [put, Uri, Resource]),
+    {ok, _} = timer:apply_after(500, coap_client, request, [put, Uri, Resource]),
     observe(Uri).
 
 observe(Uri) ->
