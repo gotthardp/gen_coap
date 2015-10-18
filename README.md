@@ -35,7 +35,7 @@ The tool accepts the following arguments:
 
  Argument      | Description
 ---------------|---------------
- -m *Method*   | request method (get|put|post|delete), default is 'get'
+ -m *Method*   | request method (get, put, post or delete), default is 'get'
  -e *Text*     | include text as payload
  -s *Duration* | subscribe for given duration [seconds]
  *Uri*         | coap:// URI identifying the resource
