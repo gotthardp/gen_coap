@@ -12,7 +12,6 @@
 
 -export([coap_discover/2, coap_get/3, coap_post/4, coap_put/4, coap_delete/3,
     coap_observe/4, coap_unobserve/1, handle_info/2, coap_ack/2]).
--export([do_storage/0, handle/2]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("gen_coap/include/coap.hrl").
@@ -24,52 +23,38 @@ coap_discover(Prefix, _Args) ->
     [{absolute, Prefix, []}].
 
 coap_get(_ChId, _Prefix, [Name]) ->
-    test_utils:send_command({get, Name}).
+    case mnesia:dirty_read(resources, Name) of
+        [{resources, Name, Resource}] -> Resource;
+        [] -> {error, not_found}
+    end.
 
 coap_post(_ChId, _Prefix, _Suffix, _Content) ->
     {error, method_not_allowed, ?NOT_IMPLEMENTED}.
 
 coap_put(_ChId, _Prefix, [Name], Content) ->
-    test_utils:send_command({put, Name, Content}).
+    mnesia:dirty_write(resources, {resources, Name, Content}).
 
 coap_delete(_ChId, _Prefix, [Name]) ->
-    test_utils:send_command({delete, Name}).
+    mnesia:dirty_delete(resources, Name).
 
 coap_observe(_ChId, _Prefix, _Suffix, _Ack) -> {error, method_not_allowed}.
 coap_unobserve(_State) -> ok.
 handle_info(_Message, State) -> {noreply, State}.
 coap_ack(_Ref, State) -> {ok, State}.
 
-% simple storage
-do_storage() ->
-    resources = ets:new(resources, [set, named_table]),
-    test_utils:await_command(?MODULE, []),
-    ets:delete(resources).
-
-handle({get, Name}, State) ->
-    case ets:lookup(resources, Name) of
-        [{Name, Resource}] -> {Resource, State};
-        [] -> {error, not_found, State}
-    end;
-handle({put, Name, Resource}, State) ->
-    ets:insert(resources, {Name, Resource}),
-    {ok, State};
-handle({delete, Name}, State) ->
-    true = ets:delete(resources, Name),
-    {ok, State}.
-
 
 % fixture is my friend
 simple_storage_test_() ->
     {setup,
         fun() ->
-            register(storage, spawn(?MODULE, do_storage, [])),
-            application:start(gen_coap),
+            ok = application:start(mnesia),
+            {atomic, ok} = mnesia:create_table(resources, []),
+            ok = application:start(gen_coap),
             coap_server_registry:add_handler([<<"storage">>], ?MODULE, undefined)
         end,
         fun(_State) ->
             application:stop(gen_coap),
-            storage ! stop
+            application:stop(mnesia)
         end,
         fun simple_storage_test/1}.
 

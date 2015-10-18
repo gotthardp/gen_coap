@@ -12,7 +12,6 @@
 
 -export([coap_discover/2, coap_get/3, coap_post/4, coap_put/4, coap_delete/3,
     coap_observe/4, coap_unobserve/1, handle_info/2, coap_ack/2]).
--export([do_storage/0, handle/2]).
 -import(coap_test, [text_resource/2]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -23,13 +22,17 @@ coap_discover(Prefix, _Args) ->
     [{absolute, Prefix, []}].
 
 coap_get(_ChId, _Prefix, []) ->
-    test_utils:send_command(get).
+    case mnesia:dirty_read(resources, []) of
+        [{resources, [], Resource}] -> Resource;
+        [] -> {error, not_found}
+    end.
 
 coap_post(_ChId, _Prefix, _Suffix, _Content) ->
     {error, method_not_allowed}.
 
 coap_put(_ChId, Prefix, [], Content) ->
-    test_utils:send_command({put, Prefix, Content}).
+    mnesia:dirty_write(resources, {resources, [], Content}),
+    coap_responder:notify(Prefix, Content).
 
 coap_delete(_ChId, _Prefix, _Suffix) ->
     {error, method_not_allowed}.
@@ -39,31 +42,19 @@ coap_unobserve(_State) -> ok.
 handle_info(_Message, State) -> {noreply, State}.
 coap_ack(_Ref, State) -> {ok, State}.
 
-% simple storage
-do_storage() ->
-    test_utils:await_command(?MODULE, undefined).
-
-handle(get, State) ->
-    case State of
-        undefined -> {error, not_found, State};
-        Resource -> {Resource, State}
-    end;
-handle({put, Prefix, Resource}, _State) ->
-    coap_responder:notify(Prefix, Resource),
-    {ok, Resource}.
-
 
 % fixture is my friend
 observe_test_() ->
     {setup,
         fun() ->
-            register(storage, spawn(?MODULE, do_storage, [])),
-            application:start(gen_coap),
+            ok = application:start(mnesia),
+            {atomic, ok} = mnesia:create_table(resources, []),
+            ok = application:start(gen_coap),
             coap_server_registry:add_handler([<<"text">>], ?MODULE, undefined)
         end,
         fun(_State) ->
             application:stop(gen_coap),
-            storage ! stop
+            application:stop(mnesia)
         end,
         fun observe_test/1}.
 

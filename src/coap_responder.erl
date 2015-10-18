@@ -28,8 +28,11 @@ start_link(Channel, Uri) ->
 
 notify(Uri, Resource) ->
     case pg2:get_members({coap_observer, Uri}) of
-        {error, _} -> ok;
-        List -> [gen_server:cast(Pid, Resource) || Pid <- List]
+        {error, _} ->
+            ok;
+        List ->
+            [gen_server:cast(Pid, Resource) || Pid <- List],
+            ok
     end.
 
 init([Channel, Uri]) ->
