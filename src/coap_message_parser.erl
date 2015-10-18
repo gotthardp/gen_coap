@@ -10,7 +10,7 @@
 % encoding and decoding for CoAP v1 messages
 -module(coap_message_parser).
 
--export([decode/1, decode_type/1, encode/1, reset_message/1]).
+-export([decode/1, decode_type/1, encode/1, message_id/1]).
 -import(core_iana, [content_formats/0]).
 -import(core_iana, [decode_enum/2, decode_enum/3, encode_enum/2, encode_enum/3]).
 -include("coap.hrl").
@@ -54,8 +54,8 @@ encode(#coap_message{type=Type, method=Method, id=MsgId, token=Token, options=Op
     <<?VERSION:2, (encode_type(Type)):2, TKL:4, Class:3, Code:5, MsgId:16, Token:TKL/bytes, Tail/bytes>>.
 
 % shortcut function for reset generation
-reset_message(<<_:16, MsgId:16, _Tail/bytes>>) ->
-    (<<?VERSION:2, 3:2, 0:4, 0:8, MsgId:16>>).
+message_id(<<_:16, MsgId:16, _Tail/bytes>>) -> MsgId;
+message_id(#coap_message{id=MsgId}) -> MsgId.
 
 decode_type(0) -> con;
 decode_type(1) -> non;
@@ -143,8 +143,9 @@ append_option({SameOptId, OptVal2}, [{SameOptId, OptVal1} | OptionList]) ->
     case is_repeatable_option(SameOptId) of
         true ->
             % we must keep the order
-            [{SameOptId, OptVal1++[OptVal2]} | OptionList]
-        % false -> crash
+            [{SameOptId, OptVal1++[OptVal2]} | OptionList];
+        false ->
+            throw({error, atom_to_list(SameOptId)++" is not repeatable"})
     end;
 append_option({OptId2, OptVal2}, OptionList) ->
     case is_repeatable_option(OptId2) of

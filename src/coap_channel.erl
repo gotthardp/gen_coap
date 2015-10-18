@@ -117,7 +117,7 @@ handle_info({datagram, BinMessage= <<?VERSION:2, 0:1, _:1, TKL:4, _Code:8, MsgId
                         coap_transport:received(BinMessage, init_transport(TrId, Receiver, State)));
                 error ->
                     % token was not recognized
-                    BinReset = coap_message_parser:reset_message(BinMessage),
+                    BinReset = coap_message_parser:encode(#coap_message{type=reset, id=MsgId}),
                     io:fwrite("<- reset~n"),
                     Sock ! {datagram, ChId, BinReset}
             end

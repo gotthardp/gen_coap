@@ -32,7 +32,8 @@ coap_post(_ChId, _Prefix, _Suffix, _Content) ->
 
 coap_put(_ChId, Prefix, [], Content) ->
     mnesia:dirty_write(resources, {resources, [], Content}),
-    coap_responder:notify(Prefix, Content).
+    coap_responder:notify(Prefix, Content),
+    ok.
 
 coap_delete(_ChId, _Prefix, _Suffix) ->
     {error, method_not_allowed}.
