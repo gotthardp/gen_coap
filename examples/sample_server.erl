@@ -1,5 +1,5 @@
 -module(sample_server).
--export([main/1]).
+-export([run/1]).
 
 -behaviour(coap_resource).
 
@@ -50,7 +50,7 @@ coap_unobserve({state, Prefix, Name}) ->
 handle_info(_Message, State) -> {noreply, State}.
 coap_ack(_Ref, State) -> {ok, State}.
 
-main([]) ->
+run([]) ->
     register(main, self()),
     ok = application:start(mnesia),
     {atomic, ok} = mnesia:create_table(resources, []),

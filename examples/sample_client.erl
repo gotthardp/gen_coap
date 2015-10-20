@@ -1,5 +1,5 @@
 -module(sample_client).
--export([main/1]).
+-export([run/1]).
 
 -include("coap.hrl").
 
@@ -18,7 +18,7 @@ parse_cmdline([Uri | Params], Command) ->
 parse_cmdline([], Command) ->
     Command.
 
-main(Params) ->
+run(Params) ->
     case catch parse_cmdline(Params, #command{}) of
         {command, Method, Uri, undefined, Content} -> request(Method, Uri, Content);
         {command, get, Uri, Duration, _Content} -> observe(Uri, Duration);
