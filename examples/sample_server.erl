@@ -1,13 +1,12 @@
-#!/usr/bin/env escript
-%% -*- erlang -*-
-%%! -pa ebin
--mode(compile).
+-module(sample_server).
+-export([main/1]).
+
 -behaviour(coap_resource).
 
 -export([coap_discover/2, coap_get/3, coap_post/4, coap_put/4, coap_delete/3,
     coap_observe/4, coap_unobserve/1, handle_info/2, coap_ack/2]).
 
--include_lib("include/coap.hrl").
+-include("coap.hrl").
 
 % resource operations
 coap_discover(Prefix, _Args) ->
@@ -56,7 +55,6 @@ main([]) ->
     ok = application:start(mnesia),
     {atomic, ok} = mnesia:create_table(resources, []),
     ok = application:start(gen_coap),
-    coap_server_registry:add_handler([], ?MODULE, undefined),
-    receive stop->ok end.
+    coap_server_registry:add_handler([], ?MODULE, undefined).
 
 % end of file

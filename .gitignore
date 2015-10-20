@@ -1,6 +1,8 @@
 .eunit
 .rebar
 .coap_dialyzer.plt
+.project
+.settings
 deps
 ebin
 src/core_link_scanner.erl

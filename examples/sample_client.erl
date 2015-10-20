@@ -1,7 +1,7 @@
-#!/usr/bin/env escript
-%% -*- erlang -*-
-%%! -pa ebin
--include_lib("include/coap.hrl").
+-module(sample_client).
+-export([main/1]).
+
+-include("coap.hrl").
 
 -record(command, {method=get, uri, observe, content=#coap_content{}}).
 

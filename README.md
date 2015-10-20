@@ -28,7 +28,7 @@ client and server implemented using [escript](http://www.erlang.org/doc/man/escr
 [![Build Status](https://travis-ci.org/gotthardp/gen_coap.svg?branch=master)](https://travis-ci.org/gotthardp/gen_coap)
 
 ### Client
-Have a look at [coap-client.sh](coap-client.sh). It implements a simple
+Have a look at [coap-client.erl](examples/coap-client.erl). It implements a simple
 command line utility for manipulation and observation of CoAP resources. It
 shall demonstrate the use of the `coap_client` and `coap_observer` modules.
 The tool accepts the following arguments:
@@ -55,11 +55,10 @@ In an erlang program you can get a CoAP resource by:
 No application need to be started to use the client.
 
 ### Server
-Have a look at [coap-server.sh](coap-server.sh). It implements a simple
+Have a look at [coap-server.erl](examples/coap-server.erl). It implements a simple
 resource storage, which can be accessed using CoAP. It shall demonstrate the
-use of the `coap_server_registry` and `coap_responder` modules. The entire
-server is implemented using [escript](http://www.erlang.org/doc/man/escript.html)
-and requires no arguments. Run the sample server as follows and then access
+use of the `coap_server_registry` and `coap_responder` modules. The server
+requires no arguments. Run the sample server as follows and then access
 it using any CoAP client (or the *gen_coap* sample client tool):
 
     $ ./coap-server.sh
