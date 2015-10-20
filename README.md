@@ -23,12 +23,12 @@ if you find a bug or miss a feature.
 ## Usage
 *gen_coap* enables you to integrate a CoAP server and/or CoAP client with
 your application. For demonstration purposes it also includes a simple CoAP
-client and server implemented using [escript](http://www.erlang.org/doc/man/escript.html).
+client and server.
 
 [![Build Status](https://travis-ci.org/gotthardp/gen_coap.svg?branch=master)](https://travis-ci.org/gotthardp/gen_coap)
 
 ### Client
-Have a look at [coap-client.erl](examples/coap-client.erl). It implements a simple
+Have a look at [sample_client.erl](examples/sample_client.erl). It implements a simple
 command line utility for manipulation and observation of CoAP resources. It
 shall demonstrate the use of the `coap_client` and `coap_observer` modules.
 The tool accepts the following arguments:
@@ -55,7 +55,7 @@ In an erlang program you can get a CoAP resource by:
 No application need to be started to use the client.
 
 ### Server
-Have a look at [coap-server.erl](examples/coap-server.erl). It implements a simple
+Have a look at [sample_server.erl](examples/sample_server.erl). It implements a simple
 resource storage, which can be accessed using CoAP. It shall demonstrate the
 use of the `coap_server_registry` and `coap_responder` modules. The server
 requires no arguments. Run the sample server as follows and then access
@@ -88,7 +88,7 @@ The following picture shows the `gen_coap` modules are their relationships:
 ### Linux
 
 First, you need to have [rebar](https://github.com/rebar/rebar) installed. Please
-follow install the package e.g. by
+install the rebar package e.g. by
 
     $ sudo yum install erlang-rebar
 
@@ -96,4 +96,4 @@ Then, you only need to run `make`.
 
 ### Windows
 
-Coming soon.
+I recommend using the [Erlang IDE](http://erlide.org) for [Eclipse](https://www.eclipse.org).
