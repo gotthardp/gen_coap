@@ -92,8 +92,27 @@ install the rebar package e.g. by
 
     $ sudo yum install erlang-rebar
 
-Then, you only need to run `make`.
+Then, you only need to run
+
+    $ git clone https://github.com/gotthardp/gen_coap.git
+    $ cd gen_coap
+    $ make
 
 ### Windows
 
-I recommend using the [Erlang IDE](http://erlide.org) for [Eclipse](https://www.eclipse.org).
+I recommend you install the [Erlang IDE](http://erlide.org) for [Eclipse](https://www.eclipse.org).
+Then, import the project:
+ - Run Eclipse, select File > New > Project..., select Erlang Project and click Next.
+ - Enter gen_coap as a Project name and select Location of *gen_coap* on your machine. Click Next.
+ - Review the following page and click Next.
+ - Set Source folders to `src;examples` and click Finish.
+
+Run the Erlang application and then you should be able to run the client and server in your Console:
+
+    1> sample_server:run([]).
+    ok
+    
+    2> sample_client:run(["coap://localhost/.well-known/core"]).
+    get "coap://localhost/.well-known/core"
+    {ok,content,{coap_content,<<"xyz">>,60,<<"application/link-format">>,<<>>}}
+    ok
