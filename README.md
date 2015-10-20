@@ -83,3 +83,18 @@ which defines callbacks that the server invokes upon reception of a CoAP request
 
 The following picture shows the `gen_coap` modules are their relationships:
 ![GitHub Logo](https://rawgit.com/gotthardp/gen_coap/master/doc/architecture.svg)
+
+## Build Instructions
+
+### Linux
+
+First, you need to have [rebar](https://github.com/rebar/rebar) installed. Please
+follow install the package e.g. by
+
+    $ sudo yum install erlang-rebar
+
+Then, you only need to run `make`.
+
+### Windows
+
+Coming soon.
