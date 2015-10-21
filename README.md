@@ -69,7 +69,7 @@ You can manually start the server from the Erlang command line by:
     1> application:start(gen_coap).
 
 However, the server out of a box does not offer any resources. To offer CoAP access
-to some server resources you need to implement the `coap_resource` behaviour,
+to some server resources you need to implement the [`coap_resource` behaviour](src/coap_resource.erl),
 which defines callbacks that the server invokes upon reception of a CoAP request.
  - `coap_discover` is called when a CoAP client asks for the list of
    ".well-known/core" resources.
