@@ -109,10 +109,10 @@ Then, import the project:
 
 Run the Erlang application and then you should be able to run the client and server in your Console:
 
-    1> sample_server:run([]).
+    1> sample_server:start().
     ok
     
-    2> sample_client:run(["coap://localhost/.well-known/core"]).
+    2> sample_client:start(["coap://localhost/.well-known/core"]).
     get "coap://localhost/.well-known/core"
     {ok,content,{coap_content,<<"xyz">>,60,<<"application/link-format">>,<<>>}}
     ok
