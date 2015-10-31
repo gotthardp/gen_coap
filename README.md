@@ -8,6 +8,7 @@ which aims to be conformant with:
  - CoRE link format [RFC 6690](https://tools.ietf.org/rfc/rfc6690.txt)
 
 The following features are not (yet) implemented:
+ - DTLS
  - Proxying
  - Uri Query
 
