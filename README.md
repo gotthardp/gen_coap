@@ -7,7 +7,11 @@ which aims to be conformant with:
  - Block-wise transfers in CoAP [draft-ietf-core-block-18](https://tools.ietf.org/id/draft-ietf-core-block-18.txt)
  - CoRE link format [RFC 6690](https://tools.ietf.org/rfc/rfc6690.txt)
 
-Tested with the following CoAP implementations:
+The following features are not (yet) implemented:
+ - Proxying
+ - Uri Query
+
+It was tested with the following CoAP implementations:
  - C [libcoap](https://www.libcoap.net/) (develop branch)
  - [coap.me](http://coap.me/)
 
