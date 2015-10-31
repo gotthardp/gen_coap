@@ -18,16 +18,23 @@
 -define(VERSION, 1).
 
 -define(OPTION_IF_MATCH, 1).
+-define(OPTION_URI_HOST, 3).
 -define(OPTION_ETAG, 4).
 -define(OPTION_IF_NONE_MATCH, 5).
 -define(OPTION_OBSERVE, 6). % draft-ietf-core-observe-16
+-define(OPTION_URI_PORT, 7).
+-define(OPTION_LOCATION_PATH, 8).
 -define(OPTION_URI_PATH, 11).
--define(OPTION_URI_QUERY, 15).
 -define(OPTION_CONTENT_FORMAT, 12).
 -define(OPTION_MAX_AGE, 14).
+-define(OPTION_URI_QUERY, 15).
 -define(OPTION_ACCEPT, 17).
+-define(OPTION_LOCATION_QUERY, 20).
 -define(OPTION_BLOCK2, 23). % draft-ietf-core-block-17
 -define(OPTION_BLOCK1, 27).
+-define(OPTION_PROXY_URI, 35).
+-define(OPTION_PROXY_SCHEME, 39).
+-define(OPTION_SIZE1, 60).
 
 % empty message only contains the 4-byte header
 decode(<<?VERSION:2, Type:2, 0:4, 0:3, 0:5, MsgId:16>>) ->
@@ -217,8 +224,11 @@ is_repeatable_option(_Else) -> false.
 
 % RFC 7252
 decode_option(?OPTION_IF_MATCH, OptVal) -> {if_match, OptVal};
+decode_option(?OPTION_URI_HOST, OptVal) -> {uri_host, OptVal};
 decode_option(?OPTION_ETAG, OptVal) -> {etag, OptVal};
 decode_option(?OPTION_IF_NONE_MATCH, <<>>) -> {if_none_match, true};
+decode_option(?OPTION_URI_PORT, OptVal) -> {uri_port, binary:decode_unsigned(OptVal)};
+decode_option(?OPTION_LOCATION_PATH, OptVal) -> {location_path, OptVal};
 decode_option(?OPTION_URI_PATH, OptVal) -> {uri_path, OptVal};
 decode_option(?OPTION_CONTENT_FORMAT, OptVal) ->
     Num = binary:decode_unsigned(OptVal),
@@ -226,6 +236,10 @@ decode_option(?OPTION_CONTENT_FORMAT, OptVal) ->
 decode_option(?OPTION_MAX_AGE, OptVal) -> {max_age, binary:decode_unsigned(OptVal)};
 decode_option(?OPTION_URI_QUERY, OptVal) -> {uri_query, OptVal};
 decode_option(?OPTION_ACCEPT, OptVal) -> {'accept', binary:decode_unsigned(OptVal)};
+decode_option(?OPTION_LOCATION_QUERY, OptVal) -> {location_query, OptVal};
+decode_option(?OPTION_PROXY_URI, OptVal) -> {proxy_uri, OptVal};
+decode_option(?OPTION_PROXY_SCHEME, OptVal) -> {proxy_scheme, OptVal};
+decode_option(?OPTION_SIZE1, OptVal) -> {size1, binary:decode_unsigned(OptVal)};
 % draft-ietf-core-observe-16
 decode_option(?OPTION_OBSERVE, OptVal) -> {observe, binary:decode_unsigned(OptVal)};
 % draft-ietf-core-block-17
@@ -244,8 +258,11 @@ decode_block1(Num, M, SizEx) ->
 
 % RFC 7252
 encode_option({if_match, OptVal}) -> {?OPTION_IF_MATCH, OptVal};
+encode_option({uri_host, OptVal}) -> {?OPTION_URI_HOST, OptVal};
 encode_option({etag, OptVal}) -> {?OPTION_ETAG, OptVal};
 encode_option({if_none_match, true}) -> {?OPTION_IF_NONE_MATCH, <<>>};
+encode_option({uri_port, OptVal}) -> {?OPTION_URI_PORT, binary:encode_unsigned(OptVal)};
+encode_option({location_path, OptVal}) -> {?OPTION_LOCATION_PATH, OptVal};
 encode_option({uri_path, OptVal}) -> {?OPTION_URI_PATH, OptVal};
 encode_option({content_format, OptVal}) when is_integer(OptVal) ->
     {?OPTION_CONTENT_FORMAT, binary:encode_unsigned(OptVal)};
@@ -255,6 +272,10 @@ encode_option({content_format, OptVal}) ->
 encode_option({max_age, OptVal}) -> {?OPTION_MAX_AGE, binary:encode_unsigned(OptVal)};
 encode_option({uri_query, OptVal}) -> {?OPTION_URI_QUERY, OptVal};
 encode_option({'accept', OptVal}) -> {?OPTION_ACCEPT, binary:encode_unsigned(OptVal)};
+encode_option({location_query, OptVal}) -> {?OPTION_LOCATION_QUERY, OptVal};
+encode_option({proxy_uri, OptVal}) -> {?OPTION_PROXY_URI, OptVal};
+encode_option({proxy_scheme, OptVal}) -> {?OPTION_PROXY_SCHEME, OptVal};
+encode_option({size1, OptVal}) -> {?OPTION_SIZE1, binary:encode_unsigned(OptVal)};
 % draft-ietf-core-observe-16
 encode_option({observe, OptVal}) -> {?OPTION_OBSERVE, binary:encode_unsigned(OptVal)};
 % draft-ietf-core-block-17
