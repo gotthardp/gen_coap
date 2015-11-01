@@ -8,9 +8,8 @@ which aims to be conformant with:
  - CoRE link format [RFC 6690](https://tools.ietf.org/rfc/rfc6690.txt)
 
 The following features are not (yet) implemented:
- - DTLS
- - Proxying
- - Uri Query
+ - DTLS transport
+ - Proxying and virtual servers (Uri-Host, Uri-Port, Proxy-Uri and Proxy-Scheme options)
 
 It was tested with the following CoAP implementations:
  - C [libcoap](https://www.libcoap.net/) (develop branch)
@@ -48,6 +47,7 @@ The tool accepts the following arguments:
 Run the example simply by:
 
     $ ./coap-client.sh coap://127.0.0.1/.well-known/core
+    $ ./coap-client.sh coap://127.0.0.1/.well-known/core?rt=core.ps
     $ ./coap-client.sh coap://127.0.0.1/resource
     $ ./coap-client.sh coap://127.0.0.1/resource -s 1000
     $ ./coap-client.sh -m put coap://127.0.0.1/resource -e data

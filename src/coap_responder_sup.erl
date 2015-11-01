@@ -26,8 +26,9 @@ get_responder(SupPid, Request) ->
 
 start_responder(SupPid, #coap_message{method=Method, options=Options}) ->
     Uri = proplists:get_value(uri_path, Options, []),
+    Query = proplists:get_value(uri_query, Options, []),
     supervisor:start_child(SupPid,
-        {{Method, Uri},
+        {{Method, Uri, Query},
             {coap_responder, start_link, [self(), Uri]},
             temporary, 5000, worker, []}).
 

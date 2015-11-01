@@ -7,7 +7,7 @@
 % Copyright (c) 2015 Petr Gotthard <petr.gotthard@centrum.cz>
 %
 
-% provides the .well-known/core resource and (in future) content queries
+% provides the .well-known/core resource and content queries
 -module(coap_server_content).
 -behaviour(coap_resource).
 
@@ -36,14 +36,40 @@ coap_unobserve(_State) -> ok.
 handle_info(_Message, State) -> {noreply, State}.
 coap_ack(_Ref, State) -> {ok, State}.
 
+% uri-query processing
+
 filter(Links, []) ->
     Links;
 filter(Links, [Search | Query]) ->
-    case binary:split(Search, <<$=>>) of
-        [Name, Value] ->
-            ok;
-        _Else -> ok
-    end,
-    filter(Links, Query).
+    filter(
+        case binary:split(Search, <<$=>>) of
+            [Name0, Value0] ->
+                Name = list_to_atom(binary_to_list(Name0)),
+                Value = wildcard_value(Value0),
+                lists:filter(
+                    fun (Link) -> match_link(Link, Name, Value) end,
+                    Links);
+            _Else ->
+                Links
+        end,
+        Query).
+
+wildcard_value(<<>>) ->
+    {global, <<>>};
+wildcard_value(Value) ->
+    case binary:last(Value) of
+        $* -> {prefix, binary:part(Value, 0, byte_size(Value)-1)};
+        _Else -> {global, Value}
+    end.
+
+match_link({_Type, _Uri, Attrs}, Name, Value0) ->
+    lists:any(
+        fun (AttrVal) ->
+            case Value0 of
+                {prefix, Value} -> binary:part(AttrVal, 0, byte_size(Value)) =:= Value;
+                {global, Value} -> AttrVal =:= Value
+            end
+        end,
+        proplists:get_all_values(Name, Attrs)).
 
 % end of file
