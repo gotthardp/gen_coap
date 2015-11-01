@@ -10,7 +10,7 @@
 -module(blockwise_transfer_tests).
 -behaviour(coap_resource).
 
--export([coap_discover/2, coap_get/3, coap_post/4, coap_put/4, coap_delete/3,
+-export([coap_discover/2, coap_get/4, coap_post/4, coap_put/4, coap_delete/3,
     coap_observe/4, coap_unobserve/1, handle_info/2, coap_ack/2]).
 -import(coap_test, [text_resource/1]).
 
@@ -21,9 +21,9 @@ coap_discover(Prefix, _Args) ->
     [{absolute, Prefix, []}].
 
 % resource generator
-coap_get(_ChId, [<<"text">>], [Size]) ->
+coap_get(_ChId, [<<"text">>], [Size], _Query) ->
     text_resource(binary_to_integer(Size));
-coap_get(_ChId, [<<"reflect">>], []) ->
+coap_get(_ChId, [<<"reflect">>], [], _Query) ->
     {error, not_found}.
 
 coap_post(_ChId, _Prefix, [], Content) ->

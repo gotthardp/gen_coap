@@ -10,7 +10,7 @@
 -module(simple_storage_tests).
 -behaviour(coap_resource).
 
--export([coap_discover/2, coap_get/3, coap_post/4, coap_put/4, coap_delete/3,
+-export([coap_discover/2, coap_get/4, coap_post/4, coap_put/4, coap_delete/3,
     coap_observe/4, coap_unobserve/1, handle_info/2, coap_ack/2]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -22,7 +22,7 @@
 coap_discover(Prefix, _Args) ->
     [{absolute, Prefix, []}].
 
-coap_get(_ChId, _Prefix, [Name]) ->
+coap_get(_ChId, _Prefix, [Name], _Query) ->
     case mnesia:dirty_read(resources, Name) of
         [{resources, Name, Resource}] -> Resource;
         [] -> {error, not_found}

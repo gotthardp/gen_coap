@@ -139,7 +139,8 @@ process_request(ChId, Request, State) ->
     check_resource(ChId, Request, State).
 
 check_resource(ChId, Request, State=#state{prefix=Prefix, module=Module}) ->
-    case invoke_callback(Module, coap_get, [ChId, Prefix, uri_suffix(Prefix, Request)]) of
+    case invoke_callback(Module, coap_get,
+            [ChId, Prefix, uri_suffix(Prefix, Request), uri_query(Request)]) of
         R1=#coap_content{} ->
             check_preconditions(ChId, Request, R1, State);
         R2={error, not_found} ->
@@ -334,6 +335,9 @@ send_response(Ref, Response=#coap_message{options=Options},
 uri_suffix(Prefix, #coap_message{options=Options}) ->
     Uri = proplists:get_value(uri_path, Options, []),
     lists:nthtail(length(Prefix), Uri).
+
+uri_query(#coap_message{options=Options}) ->
+    proplists:get_value(uri_query, Options, []).
 
 next_seq(Seq) ->
     if
