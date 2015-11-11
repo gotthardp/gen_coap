@@ -212,7 +212,7 @@ encode_option_list([{OptNum, OptVal} | OptionList], LastNum, Acc) ->
     encode_option_list(OptionList, OptNum, Acc2);
 
 encode_option_list([], _LastNum, Acc) ->
-    Acc.
+    <<Acc/binary, 16#FF>>.
 
 is_repeatable_option(if_match) -> true;
 is_repeatable_option(etag) -> true;
