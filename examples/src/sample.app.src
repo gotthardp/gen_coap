@@ -1,0 +1,9 @@
+{application, sample,
+	[{description, "Constrained Application Protocol"},
+	{vsn, "0.0.1"},
+	{modules, []},
+	{registered, []},
+	{env, []},
+	{applications, [kernel, stdlib, gen_coap]}]}.
+
+% end of file

@@ -1,6 +1,6 @@
 #!/usr/bin/env escript
 %% -*- erlang -*-
-%%! -pa ebin
+%%! -pa ebin examples/ebin
 
 main(_Params) ->
     sample_server:start(),
