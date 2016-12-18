@@ -50,7 +50,8 @@ observe_test_() ->
         fun() ->
             ok = application:start(mnesia),
             {atomic, ok} = mnesia:create_table(resources, []),
-            ok = application:start(gen_coap),
+            {ok, _} = application:ensure_all_started(gen_coap),
+            {ok, _} = coap_server:start_udp(coap_udp_socket),
             coap_server_registry:add_handler([<<"text">>], ?MODULE, undefined)
         end,
         fun(_State) ->

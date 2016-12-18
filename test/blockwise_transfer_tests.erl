@@ -44,7 +44,8 @@ coap_ack(_Ref, State) -> {ok, State}.
 blockwise_transfer_test_() ->
     {setup,
         fun() ->
-            application:start(gen_coap),
+            {ok, _} = application:ensure_all_started(gen_coap),
+            {ok, _} = coap_server:start_udp(coap_udp_socket),
             coap_server_registry:add_handler([<<"text">>], ?MODULE, undefined),
             coap_server_registry:add_handler([<<"reflect">>], ?MODULE, undefined)
         end,

@@ -16,8 +16,8 @@
 -include("coap.hrl").
 
 ping(Uri) ->
-    {ChId, _Path, _Query} = resolve_uri(Uri),
-    channel_apply(ChId,
+    {Scheme, ChId, _Path, _Query} = resolve_uri(Uri),
+    channel_apply(Scheme, ChId,
         fun(Channel) ->
             {ok, Ref} = coap_channel:ping(Channel),
             case await_response(Channel, undefined, [], Ref, <<>>) of
@@ -33,8 +33,8 @@ request(Method, Uri, Content) ->
     request(Method, Uri, Content, []).
 
 request(Method, Uri, Content, Options) ->
-    {ChId, Path, Query} = resolve_uri(Uri),
-    channel_apply(ChId,
+    {Scheme, ChId, Path, Query} = resolve_uri(Uri),
+    channel_apply(Scheme, ChId,
         fun(Channel) ->
             request_block(Channel, Method, [{uri_path, Path}, {uri_query, Query} | Options], Content)
         end).
@@ -90,10 +90,10 @@ ack(Channel, Message) ->
 
 
 resolve_uri(Uri) ->
-    {ok, {_Scheme, _UserInfo, Host, PortNo, Path, Query}} =
-        http_uri:parse(Uri, [{scheme_defaults, [{coap, 5683}]}]),
+    {ok, {Scheme, _UserInfo, Host, PortNo, Path, Query}} =
+        http_uri:parse(Uri, [{scheme_defaults, [{coap, ?DEFAULT_COAP_PORT}, {coaps, ?DEFAULT_COAPS_PORT}]}]),
     {ok, PeerIP} = inet:getaddr(Host, inet),
-    {{PeerIP, PortNo}, split_path(Path), split_query(Query)}.
+    {Scheme, {PeerIP, PortNo}, split_path(Path), split_query(Query)}.
 
 split_path([]) -> [];
 split_path([$/]) -> [];
@@ -114,7 +114,7 @@ split_segments(Path, Char, Acc) ->
 make_segment(Seg) ->
     list_to_binary(http_uri:decode(Seg)).
 
-channel_apply(ChId, Fun) ->
+channel_apply(coap, ChId, Fun) ->
     {ok, Sock} = coap_udp_socket:start_link(),
     {ok, Channel} = coap_udp_socket:get_channel(Sock, ChId),
     % send and receive
@@ -122,27 +122,40 @@ channel_apply(ChId, Fun) ->
     % terminate the processes
     coap_channel:close(Channel),
     coap_udp_socket:close(Sock),
+    Res;
+
+channel_apply(coaps, {Host, Port}=ChId, Fun) ->
+    {ok, Sock, Channel} = coap_dtls_socket:connect(Host, Port),
+    % send and receive
+    Res = apply(Fun, [Channel]),
+    % terminate the processes
+    coap_channel:close(Channel),
+    coap_dtls_socket:close(Sock),
     Res.
 
 -include_lib("eunit/include/eunit.hrl").
 
 % note that the options below must be sorted by the option numbers
 resolver_test_()-> [
-    ?_assertEqual({{{127,0,0,1},5683},[], []}, resolve_uri("coap://localhost")),
-    ?_assertEqual({{{127,0,0,1},1234},[], []}, resolve_uri("coap://localhost:1234")),
-    ?_assertEqual({{{127,0,0,1},5683},[], []}, resolve_uri("coap://localhost/")),
-    ?_assertEqual({{{127,0,0,1},1234},[], []}, resolve_uri("coap://localhost:1234/")),
-    ?_assertEqual({{{127,0,0,1},5683},[<<"/">>], []}, resolve_uri("coap://localhost/%2F")),
+    ?_assertEqual({coap, {{127,0,0,1},?DEFAULT_COAP_PORT},[], []}, resolve_uri("coap://localhost")),
+    ?_assertEqual({coap, {{127,0,0,1},1234},[], []}, resolve_uri("coap://localhost:1234")),
+    ?_assertEqual({coap, {{127,0,0,1},?DEFAULT_COAP_PORT},[], []}, resolve_uri("coap://localhost/")),
+    ?_assertEqual({coap, {{127,0,0,1},1234},[], []}, resolve_uri("coap://localhost:1234/")),
+    ?_assertEqual({coaps, {{127,0,0,1},?DEFAULT_COAPS_PORT},[], []}, resolve_uri("coaps://localhost")),
+    ?_assertEqual({coaps, {{127,0,0,1},1234},[], []}, resolve_uri("coaps://localhost:1234")),
+    ?_assertEqual({coaps, {{127,0,0,1},?DEFAULT_COAPS_PORT},[], []}, resolve_uri("coaps://localhost/")),
+    ?_assertEqual({coaps, {{127,0,0,1},1234},[], []}, resolve_uri("coaps://localhost:1234/")),
+    ?_assertEqual({coap, {{127,0,0,1},?DEFAULT_COAP_PORT},[<<"/">>], []}, resolve_uri("coap://localhost/%2F")),
     % from RFC 7252, Section 6.3
     % the following three URIs are equivalent
-    ?_assertEqual({{{127,0,0,1},5683},[<<"~sensors">>, <<"temp.xml">>], []},
+    ?_assertEqual({coap, {{127,0,0,1},5683},[<<"~sensors">>, <<"temp.xml">>], []},
         resolve_uri("coap://localhost:5683/~sensors/temp.xml")),
-    ?_assertEqual({{{127,0,0,1},5683},[<<"~sensors">>, <<"temp.xml">>], []},
+    ?_assertEqual({coap, {{127,0,0,1},?DEFAULT_COAP_PORT},[<<"~sensors">>, <<"temp.xml">>], []},
         resolve_uri("coap://LOCALHOST/%7Esensors/temp.xml")),
-    ?_assertEqual({{{127,0,0,1},5683},[<<"~sensors">>, <<"temp.xml">>], []},
+    ?_assertEqual({coap, {{127,0,0,1},?DEFAULT_COAP_PORT},[<<"~sensors">>, <<"temp.xml">>], []},
         resolve_uri("coap://LOCALHOST/%7esensors/temp.xml")),
     % from RFC 7252, Appendix B
-    ?_assertEqual({{{127,0,0,1},61616},[<<>>, <<"/">>, <<>>, <<>>], [<<"//">>,<<"?&">>]},
+    ?_assertEqual({coap, {{127,0,0,1},61616},[<<>>, <<"/">>, <<>>, <<>>], [<<"//">>,<<"?&">>]},
         resolve_uri("coap://localhost:61616//%2F//?%2F%2F&?%26"))
     ].
 

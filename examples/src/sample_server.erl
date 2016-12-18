@@ -54,7 +54,9 @@ start() ->
     register(main, self()),
     ok = application:start(mnesia),
     {atomic, ok} = mnesia:create_table(resources, []),
-    ok = application:start(gen_coap),
+    {ok, _} = application:ensure_all_started(gen_coap),
+    {ok, _} = coap_server:start_udp(coap_udp_socket),
+    {ok, _} = coap_server:start_dtls(coap_dtls_socket, [{certfile, "cert.pem"}, {keyfile, "key.pem"}]),
     coap_server_registry:add_handler([], ?MODULE, undefined).
 
 % end of file

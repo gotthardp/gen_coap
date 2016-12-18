@@ -16,33 +16,47 @@
 
 -behaviour(supervisor).
 -export([init/1]).
--export([channel_sup/1]).
+-export([start_udp/1, start_udp/2, start_dtls/2, start_dtls/3, channel_sup/1]).
 
--define(DEFAULT_COAP_PORT, 5683).
+-include("coap.hrl").
 
 start() ->
     start(normal, []).
 
 start(normal, []) ->
-    supervisor:start_link(?MODULE, [?DEFAULT_COAP_PORT]).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 stop(_Pid) ->
     ok.
 
 
-init([InPort]) ->
+init([]) ->
     {ok, {{one_for_all, 3, 10}, [
         {coap_server_registry,
             {coap_server_registry, start_link, []},
             permanent, 5000, worker, []},
         {coap_channel_sup_sup,
             {coap_channel_sup_sup, start_link, []},
-            permanent, infinity, supervisor, []},
-        {coap_udp_socket,
-            % for convenience register the main worker under the application name
-            {coap_udp_socket, start_link, [{local, ?MODULE}, InPort, self()]},
-            permanent, 5000, worker, []}
+            permanent, infinity, supervisor, []}
     ]}}.
+
+start_udp(Name) ->
+    start_udp(Name, ?DEFAULT_COAP_PORT).
+
+start_udp(Name, UdpPort) ->
+    supervisor:start_child(?MODULE,
+        {Name,
+            {coap_udp_socket, start_link, [UdpPort, whereis(?MODULE)]},
+            permanent, 5000, worker, []}).
+
+start_dtls(Name, DtlsOpts) ->
+    start_dtls(Name, ?DEFAULT_COAPS_PORT, DtlsOpts).
+
+start_dtls(Name, DtlsPort, DtlsOpts) ->
+    supervisor:start_child(?MODULE,
+        {Name,
+            {coap_dtls_listen, start_link, [DtlsPort, DtlsOpts]},
+            permanent, 5000, worker, []}).
 
 channel_sup(SupPid) -> child(SupPid, coap_channel_sup_sup).
 

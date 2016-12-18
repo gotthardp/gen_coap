@@ -13,7 +13,7 @@
 -module(coap_udp_socket).
 -behaviour(gen_server).
 
--export([start_link/0, start_link/2, start_link/3, get_channel/2, close/1]).
+-export([start_link/0, start_link/2, get_channel/2, close/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
 
 -record(state, {sock, chans, pool}).
@@ -24,8 +24,6 @@ start_link() ->
 % server
 start_link(InPort, SupPid) ->
     gen_server:start_link(?MODULE, [InPort, SupPid], []).
-start_link(ServerName, InPort, SupPid) ->
-    gen_server:start_link(ServerName, ?MODULE, [InPort, SupPid], []).
 
 get_channel(Pid, {PeerIP, PeerPortNo}) ->
     gen_server:call(Pid, {get_channel, {PeerIP, PeerPortNo}}).

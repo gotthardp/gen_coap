@@ -8,3 +8,4 @@ ebin
 src/core_link_scanner.erl
 src/core_link_parser.erl
 erl_crash.dump
+*.pem

@@ -32,7 +32,8 @@ coap_ack(_Ref, State) -> {ok, State}.
 empty_server_test_() ->
     {setup,
         fun() ->
-            application:start(gen_coap)
+            {ok, _} = application:ensure_all_started(gen_coap),
+            {ok, _} = coap_server:start_udp(coap_udp_socket)
         end,
         fun(_State) ->
             application:stop(gen_coap)
@@ -57,7 +58,8 @@ empty_server(_State) ->
 unknown_handler_test_() ->
     {setup,
         fun() ->
-            application:start(gen_coap),
+            {ok, _} = application:ensure_all_started(gen_coap),
+            {ok, _} = coap_server:start_udp(coap_udp_socket),
             coap_server_registry:add_handler([<<"unknown">>], unknown_module, undefined)
         end,
         fun(_State) ->

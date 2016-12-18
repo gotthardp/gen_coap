@@ -2,13 +2,12 @@
 
 Pure Erlang implementation of the Constrained Application Protocol (CoAP),
 which aims to be conformant with:
- - CoAP core protocol [RFC 7252](https://tools.ietf.org/rfc/rfc7252.txt)
+ - CoAP core protocol [RFC 7252](https://tools.ietf.org/rfc/rfc7252.txt), including the DTLS-Secured CoAP
  - CoAP Observe option [RFC 7641](https://tools.ietf.org/rfc/rfc7641.txt)
  - Block-wise transfers in CoAP [draft-ietf-core-block-18](https://tools.ietf.org/id/draft-ietf-core-block-18.txt)
  - CoRE link format [RFC 6690](https://tools.ietf.org/rfc/rfc6690.txt)
 
 The following features are not (yet) implemented:
- - DTLS transport
  - Proxying and virtual servers (Uri-Host, Uri-Port, Proxy-Uri and Proxy-Scheme options)
 
 It was tested with the following CoAP implementations:
@@ -47,8 +46,8 @@ The tool accepts the following arguments:
 Run the example simply by:
 
     $ ./coap-client.sh coap://127.0.0.1/.well-known/core
-    $ ./coap-client.sh coap://127.0.0.1/.well-known/core?rt=core.ps
-    $ ./coap-client.sh coap://127.0.0.1/resource
+    $ ./coap-client.sh coaps://127.0.0.1/.well-known/core?rt=core.ps
+    $ ./coap-client.sh coaps://127.0.0.1/resource
     $ ./coap-client.sh coap://127.0.0.1/resource -s 1000
     $ ./coap-client.sh -m put coap://127.0.0.1/resource -e data
     $ ./coap-client.sh -m delete coap://127.0.0.1/resource
@@ -71,7 +70,13 @@ it using any CoAP client (or the *gen_coap* sample client tool):
 You can manually start the server from the Erlang command line by:
 
     $ erl -pa ebin
-    1> application:start(gen_coap).
+
+    1> application:ensure_all_started(gen_coap).
+    {ok,[crypto,asn1,public_key,ssl,gen_coap]}
+
+    2> coap_server:start_udp(coap_udp_socket).
+    {ok,<0.78.0>}
+
 
 However, the server out of a box does not offer any resources. To offer CoAP access
 to some server resources you need to implement the [`coap_resource` behaviour](src/coap_resource.erl),
@@ -82,6 +87,14 @@ which defines callbacks that the server invokes upon reception of a CoAP request
    receives a GET, POST, PUT or DELETE request for a resource.
  - `coap_observe` or `coap_unobserve` is called upon a GET request with an
    Observe=0 or Observe=1 option.
+
+Since Erlang 19.2 the DTLS transport is supported. To configure certificates for
+the sample coap-server do:
+
+    $ cd gen_coap
+    $ sudo openssl req -new > csr.pem
+    $ sudo openssl rsa -in privkey.pem -out key.pem
+    $ sudo openssl x509 -in csr.pem -out cert.pem -req -signkey key.pem
 
 ### Architecture
 
@@ -116,7 +129,7 @@ Run the Erlang application and then you should be able to run the client and ser
 
     1> sample_server:start().
     ok
-    
+
     2> sample_client:start(["coap://localhost/.well-known/core"]).
     get "coap://localhost/.well-known/core"
     {ok,content,{coap_content,<<"xyz">>,60,<<"application/link-format">>,<<>>}}

@@ -1,10 +1,10 @@
 {application, gen_coap,
 	[{description, "Constrained Application Protocol"},
-	{vsn, "0.0.1"},
+	{vsn, "0.2.0"},
 	{modules, []},
 	{registered, []},
 	{mod, {coap_server, []}},
 	{env, []},
-	{applications, [kernel, stdlib]}]}.
+	{applications, [kernel, stdlib, ssl]}]}.
 
 % end of file

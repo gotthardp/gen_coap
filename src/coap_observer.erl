@@ -15,7 +15,7 @@
 
 -include("coap.hrl").
 
--record(state, {client, sock, channel, ropt, ref, lastseq}).
+-record(state, {client, scheme, sock, channel, ropt, ref, lastseq}).
 
 observe(Uri) ->
     observe(Uri, []).
@@ -41,14 +41,21 @@ stop(Pid) ->
 
 
 init([Client, Uri, Options]) ->
-    {ChId, Path, Query} = coap_client:resolve_uri(Uri),
-    {ok, Sock} = coap_udp_socket:start_link(),
-    {ok, Channel} = coap_udp_socket:get_channel(Sock, ChId),
+    {Scheme, ChId, Path, Query} = coap_client:resolve_uri(Uri),
+    {ok, Sock, Channel} = case Scheme of
+        coap ->
+            {ok, So} = coap_udp_socket:start_link(),
+            {ok, Ch} = coap_udp_socket:get_channel(So, ChId),
+            {ok, So, Ch};
+        coaps ->
+            {Host, Port} = ChId,
+            coap_dtls_socket:connect(Host, Port)
+    end,
     % observe the resource
     ROpt = [{uri_path, Path}, {uri_query, Query}|Options],
     {ok, Ref} = coap_channel:send(Channel,
         coap_message:request(con, get, <<>>, [{observe, 0}|ROpt])),
-    {ok, #state{client=Client, sock=Sock, channel=Channel, ropt=ROpt, ref=Ref}}.
+    {ok, #state{client=Client, scheme=Scheme, sock=Sock, channel=Channel, ropt=ROpt, ref=Ref}}.
 
 handle_call(shutdown, _From, State=#state{channel=Channel, ropt=ROpt}) ->
     {ok, Ref} = coap_channel:send(Channel,
@@ -81,9 +88,13 @@ handle_info(Info, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-terminate(_Reason, #state{sock=Sock, channel=Channel}) ->
+terminate(_Reason, #state{scheme=coap, sock=Sock, channel=Channel}) ->
     coap_channel:close(Channel),
     coap_udp_socket:close(Sock),
+    ok;
+terminate(_Reason, #state{scheme=coaps, sock=Sock, channel=Channel}) ->
+    coap_channel:close(Channel),
+    coap_dtls_socket:close(Sock),
     ok.
 
 
