@@ -46,7 +46,7 @@ handle_cast(accept, State = #state{sock=ListenSocket}) ->
     % establish the connection
     ok = ssl:ssl_accept(Socket),
     % FIXME: where do we get the chanel id?
-    {ok, SupPid, Pid} = coap_channel_sup:start_link(self(), undefined),
+    {ok, SupPid, Pid} = coap_channel_sup:start_link(self(), {{0,0,0,0}, 0}),
     {noreply, State#state{sock=Socket, supid=SupPid, channel=Pid}};
 handle_cast(shutdown, State) ->
     {stop, normal, State}.
