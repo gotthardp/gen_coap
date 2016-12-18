@@ -2,7 +2,8 @@
 
 Pure Erlang implementation of the Constrained Application Protocol (CoAP),
 which aims to be conformant with:
- - CoAP core protocol [RFC 7252](https://tools.ietf.org/rfc/rfc7252.txt), including the DTLS-Secured CoAP
+ - CoAP core protocol [RFC 7252](https://tools.ietf.org/rfc/rfc7252.txt),
+   including (since Erlang/OTP 19.2) the DTLS-Secured CoAP
  - CoAP Observe option [RFC 7641](https://tools.ietf.org/rfc/rfc7641.txt)
  - Block-wise transfers in CoAP [draft-ietf-core-block-18](https://tools.ietf.org/id/draft-ietf-core-block-18.txt)
  - CoRE link format [RFC 6690](https://tools.ietf.org/rfc/rfc6690.txt)
@@ -41,7 +42,7 @@ The tool accepts the following arguments:
  -m *Method*   | request method (get, put, post or delete), default is 'get'
  -e *Text*     | include text as payload
  -s *Duration* | subscribe for given duration [seconds]
- *Uri*         | coap:// URI identifying the resource
+ *Uri*         | coap:// or coaps:// URI identifying the resource
 
 Run the example simply by:
 
