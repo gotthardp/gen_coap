@@ -124,7 +124,7 @@ channel_apply(coap, ChId, Fun) ->
     coap_udp_socket:close(Sock),
     Res;
 
-channel_apply(coaps, {Host, Port}=ChId, Fun) ->
+channel_apply(coaps, {Host, Port}, Fun) ->
     {ok, Sock, Channel} = coap_dtls_socket:connect(Host, Port),
     % send and receive
     Res = apply(Fun, [Channel]),

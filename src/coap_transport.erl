@@ -156,8 +156,8 @@ out_con({out, Message}, State=#state{sock=Sock, cid=ChId}) ->
     %io:fwrite("~p, <= ~p~n", [self(), Message]),
     BinMessage = coap_message_parser:encode(Message),
     Sock ! {datagram, ChId, BinMessage},
-    _ = random:seed(os:timestamp()),
-    Timeout = ?ACK_TIMEOUT+random:uniform(?ACK_RANDOM_FACTOR),
+    _ = rand:seed(exs1024),
+    Timeout = ?ACK_TIMEOUT+rand:uniform(?ACK_RANDOM_FACTOR),
     next_state(await_pack, State#state{msg=Message, retry_time=Timeout, retry_count=0}, Timeout).
 
 % peer ack
