@@ -1,18 +1,45 @@
-# See LICENSE for licensing information.
+# rebar3 logic by Bjorn-Egil Dahlberg
+# https://gist.github.com/psyeugenic/d2d53a15463b218fd20c2fe7fd73ced0
+REBAR3_URL=https://s3.amazonaws.com/rebar3/rebar3
 
-REBAR ?= rebar3
+ifeq ($(wildcard rebar3),rebar3)
+REBAR3 = $(CURDIR)/rebar3
+endif
 
-compile:
-	@$(REBAR) compile
+REBAR3 ?= $(shell test -e `which rebar3` 2>/dev/null && which rebar3 || echo "./rebar3")
+
+ifeq ($(REBAR3),)
+REBAR3 = $(CURDIR)/rebar3
+endif
+
+.PHONY: deps test build
+
+build: $(REBAR3)
+	@$(REBAR3) compile
+
+$(REBAR3):
+	wget $(REBAR3_URL) || curl -Lo rebar3 $(REBAR3_URL)
+	@chmod a+x rebar3
+
+upgrade:
+	@$(REBAR3) upgrade
+
+deps:
+	@$(REBAR3) get-deps
 
 clean:
-	@$(REBAR) clean
-	rm -f erl_crash.dump
+	@$(REBAR3) clean
+
+distclean: clean
+	@$(REBAR3) delete-deps
 
 test:
-	@$(REBAR) eunit
+	@$(REBAR3) eunit
 
-dialyze:
-	@$(REBAR) dialyzer
+release:
+	@$(REBAR3) release
 
-.PHONY: compile clean test dialyze
+dist:
+	@$(REBAR3) tar
+
+# end of file
