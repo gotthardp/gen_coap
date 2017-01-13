@@ -73,7 +73,7 @@ handle_cast(Request, State) ->
     {noreply, State}.
 
 transport_new_request(Message, Receiver, State=#state{tokens=Tokens}) ->
-    Token = crypto:rand_bytes(4), % shall be at least 32 random bits
+    Token = crypto:strong_rand_bytes(4), % shall be at least 32 random bits
     Tokens2 = dict:store(Token, Receiver, Tokens),
     transport_new_message(Message#coap_message{token=Token}, Receiver, State#state{tokens=Tokens2}).
 
@@ -161,8 +161,8 @@ terminate(_Reason, #state{sup=SupPid, sock=SockPid, cid=ChId}) ->
 
 
 first_mid() ->
-    _ = random:seed(os:timestamp()),
-    random:uniform(?MAX_MESSAGE_ID).
+    _ = rand:seed(exs1024),
+    rand:uniform(?MAX_MESSAGE_ID).
 
 next_mid(MsgId) ->
     if

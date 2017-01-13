@@ -1,6 +1,7 @@
 .eunit
 .rebar
-.coap_dialyzer.plt
+.coap_dialyzer*
+
 .project
 .settings
 deps
@@ -9,3 +10,9 @@ src/core_link_scanner.erl
 src/core_link_parser.erl
 erl_crash.dump
 *.pem
+/_build/
+.idea/
+_build/
+examples/sample.iml
+gen_coap.iml
+rebar.lock
