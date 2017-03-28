@@ -32,7 +32,7 @@ client and server.
 [![Build Status](https://travis-ci.org/gotthardp/gen_coap.svg?branch=master)](https://travis-ci.org/gotthardp/gen_coap)
 
 ### Client
-Have a look at [sample_client.erl](examples/sample_client.erl). It implements a simple
+Have a look at [sample_client.erl](examples/src/sample_client.erl). It implements a simple
 command line utility for manipulation and observation of CoAP resources. It
 shall demonstrate the use of the `coap_client` and `coap_observer` modules.
 The tool accepts the following arguments:
@@ -60,7 +60,7 @@ In an erlang program you can get a CoAP resource by:
 No application need to be started to use the client.
 
 ### Server
-Have a look at [sample_server.erl](examples/sample_server.erl). It implements a simple
+Have a look at [sample_server.erl](examples/src/sample_server.erl). It implements a simple
 resource storage, which can be accessed using CoAP. It shall demonstrate the
 use of the `coap_server_registry` and `coap_responder` modules. The server
 requires no arguments. Run the sample server as follows and then access
@@ -70,7 +70,7 @@ it using any CoAP client (or the *gen_coap* sample client tool):
 
 You can manually start the server from the Erlang command line by:
 
-    $ erl -pa ebin
+    $ erl -pa _build/default/lib/gen_coap/ebin
 
     1> application:ensure_all_started(gen_coap).
     {ok,[crypto,asn1,public_key,ssl,gen_coap]}
