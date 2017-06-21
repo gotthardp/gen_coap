@@ -37,7 +37,12 @@ init(_Args) ->
     }}.
 
 handle_call({add_handler, Prefix, Module, Args}, _From, State=#state{reg=Reg}) ->
-    {reply, ok, State#state{reg=[{Prefix, Module, Args}|Reg]}};
+    NewReg =    case lists:member({Prefix, Module, Args}, Reg) of
+                    true  -> Reg;
+                    false -> [{Prefix, Module, Args}|Reg]
+                end,
+    {reply, ok, State#state{reg=NewReg}};
+
 
 handle_call({get_handler, Uri}, _From, State=#state{reg=Reg}) ->
     {reply, get_handler(Uri, Reg), State};
