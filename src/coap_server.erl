@@ -50,8 +50,8 @@ start_udp(Name, UdpPort) ->
             transient, 5000, worker, []}).
 
 stop_udp(Name) ->
-    supervisor:terminate_child(coap_server, Name),
-    supervisor:delete_child(coap_server, Name).
+    supervisor:terminate_child(?MODULE, Name),
+    supervisor:delete_child(?MODULE, Name).
 
 
 start_dtls(Name, DtlsOpts) ->
@@ -64,8 +64,8 @@ start_dtls(Name, DtlsPort, DtlsOpts) ->
             transient, 5000, worker, []}).
 
 stop_dtls(Name) ->
-    supervisor:terminate_child(coap_server, Name),
-    supervisor:delete_child(coap_server, Name).
+    supervisor:terminate_child(?MODULE, Name),
+    supervisor:delete_child(?MODULE, Name).
 
 
 channel_sup(SupPid) -> child(SupPid, coap_channel_sup_sup).
