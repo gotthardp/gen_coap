@@ -16,7 +16,7 @@
 
 -behaviour(supervisor).
 -export([init/1]).
--export([start_udp/1, start_udp/2, start_dtls/2, start_dtls/3, channel_sup/1]).
+-export([start_udp/1, start_udp/2, stop_udp/1, start_dtls/2, start_dtls/3, stop_dtls/1, channel_sup/1]).
 
 -include("coap.hrl").
 
@@ -47,7 +47,12 @@ start_udp(Name, UdpPort) ->
     supervisor:start_child(?MODULE,
         {Name,
             {coap_udp_socket, start_link, [UdpPort, whereis(?MODULE)]},
-            permanent, 5000, worker, []}).
+            transient, 5000, worker, []}).
+
+stop_udp(Name) ->
+    supervisor:terminate_child(?MODULE, Name),
+    supervisor:delete_child(?MODULE, Name).
+
 
 start_dtls(Name, DtlsOpts) ->
     start_dtls(Name, ?DEFAULT_COAPS_PORT, DtlsOpts).
@@ -56,7 +61,12 @@ start_dtls(Name, DtlsPort, DtlsOpts) ->
     supervisor:start_child(?MODULE,
         {Name,
             {coap_dtls_listen, start_link, [DtlsPort, DtlsOpts]},
-            permanent, 5000, worker, []}).
+            transient, 5000, worker, []}).
+
+stop_dtls(Name) ->
+    supervisor:terminate_child(?MODULE, Name),
+    supervisor:delete_child(?MODULE, Name).
+
 
 channel_sup(SupPid) -> child(SupPid, coap_channel_sup_sup).
 
