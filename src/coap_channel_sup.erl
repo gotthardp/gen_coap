@@ -16,7 +16,7 @@
 start_link(SockPid, ChId) ->
     {ok, SupPid} = supervisor:start_link(?MODULE, []),
     {ok, ReSup} = supervisor:start_child(SupPid,
-        {coap_resonder_sup,
+        {coap_responder_sup,
             {coap_responder_sup, start_link, []},
             permanent, infinity, supervisor, []}),
     {ok, ChPid} = supervisor:start_child(SupPid,
