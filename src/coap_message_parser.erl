@@ -90,7 +90,7 @@ methods() -> [
     {{2,31}, {ok, continue}}, % block
     % error is a tuple {error, ...}
     {{4,00}, {error, bad_request}},
-    {{4,01}, {error, uauthorized}},
+    {{4,01}, {error, unauthorized}},
     {{4,02}, {error, bad_option}},
     {{4,03}, {error, forbidden}},
     {{4,04}, {error, not_found}},
