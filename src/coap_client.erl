@@ -65,7 +65,7 @@ await_response(Channel, Method, ROpt, Ref, Content, Timeout, Fragment) ->
         {coap_response, _ChId, Channel, Ref, #coap_message{method={ok, continue}, options=Options}} ->
             case proplists:get_value(block1, Options) of
                 {Num, true, Size} ->
-                    request_block(Channel, Method, ROpt, {Num+1, false, Size}, Content)
+                    request_block(Channel, Method, ROpt, {Num+1, false, Size}, Content, Timeout)
             end;
         {coap_response, _ChId, Channel, Ref, Message=#coap_message{method={ok, Code}, options=Options, payload=Data}} ->
             case proplists:get_value(block2, Options) of
