@@ -24,7 +24,10 @@ start_channel(SupPid, ChId) ->
             temporary, infinity, supervisor, []}).
 
 delete_channel(SupPid, ChId) ->
-    supervisor:terminate_child(SupPid, ChId).
+    case supervisor:terminate_child(SupPid, ChId) of
+        ok -> supervisor:delete_child(SupPid, ChId);
+        Error -> Error
+    end.
 
 init([]) ->
     {ok, {{one_for_one, 0, 1}, []}}.
