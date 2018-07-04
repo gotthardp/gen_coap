@@ -87,18 +87,20 @@ get_content(#coap_message{options=Options, payload=Payload}) ->
                end,
         max_age = proplists:get_value(max_age, Options, ?DEFAULT_MAX_AGE),
         format = proplists:get_value(content_format, Options),
+        location_path = proplists:get_value(location_path, Options, []),
         payload = Payload}.
 
 set_content(Content, Msg) ->
     set_content(Content, undefined, Msg).
 
 % segmentation not requested and not required
-set_content(#coap_content{etag=ETag, max_age=MaxAge, format=Format, payload=Payload}, undefined, Msg)
-        when byte_size(Payload) =< ?MAX_BLOCK_SIZE ->
+set_content(#coap_content{etag=ETag, max_age=MaxAge, format=Format, location_path = LocPath, payload=Payload}, undefined, Msg)
+    when byte_size(Payload) =< ?MAX_BLOCK_SIZE ->
     set(etag, [ETag],
         set(max_age, MaxAge,
             set(content_format, Format,
-                set_payload(Payload, Msg))));
+                set(location_path, LocPath,
+                    set_payload(Payload, Msg)))));
 % segmentation not requested, but required (late negotiation)
 set_content(Content, undefined, Msg) ->
     set_content(Content, {0, true, ?MAX_BLOCK_SIZE}, Msg);

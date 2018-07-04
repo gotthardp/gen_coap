@@ -87,6 +87,7 @@ methods() -> [
     {{2,03}, {ok, valid}},
     {{2,04}, {ok, changed}},
     {{2,05}, {ok, content}},
+    {{2,07}, {ok, nocontent}},
     {{2,31}, {ok, continue}}, % block
     % error is a tuple {error, ...}
     {{4,00}, {error, bad_request}},
