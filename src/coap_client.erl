@@ -10,8 +10,10 @@
 % convenience functions for building CoAP clients
 -module(coap_client).
 
--export([ping/1, request/2, request/3, request/4, ack/2]).
+-export([ping/1, request/2, request/3, request/4, request/5, ack/2]).
 -export([resolve_uri/1, await_response/5]).
+
+-define(DEFAULT_TIMEOUT, 30000).
 
 -include("coap.hrl").
 
@@ -27,37 +29,43 @@ ping(Uri) ->
         end).
 
 request(Method, Uri) ->
-    request(Method, Uri, #coap_content{}, []).
+    request(Method, Uri, #coap_content{}).
 
 request(Method, Uri, Content) ->
     request(Method, Uri, Content, []).
 
 request(Method, Uri, Content, Options) ->
+    request(Method, Uri, Content, Options, ?DEFAULT_TIMEOUT).
+
+request(Method, Uri, Content, Options, Timeout) ->
     {Scheme, ChId, Path, Query} = resolve_uri(Uri),
     channel_apply(Scheme, ChId,
         fun(Channel) ->
-            request_block(Channel, Method, [{uri_path, Path}, {uri_query, Query} | Options], Content)
+            request_block(Channel, Method, [{uri_path, Path}, {uri_query, Query} | Options], Content, Timeout)
         end).
 
-request_block(Channel, Method, ROpt, Content) ->
-    request_block(Channel, Method, ROpt, undefined, Content).
+request_block(Channel, Method, ROpt, Content, Timeout) ->
+    request_block(Channel, Method, ROpt, undefined, Content, Timeout).
 
-request_block(Channel, Method, ROpt, Block1, Content) ->
+request_block(Channel, Method, ROpt, Block1, Content, Timeout) ->
     {ok, Ref} = coap_channel:send(Channel,
         coap_message:set_content(Content, Block1,
             coap_message:request(con, Method, <<>>, ROpt))),
-    await_response(Channel, Method, ROpt, Ref, Content).
+    await_response(Channel, Method, ROpt, Ref, Content, Timeout).
 
 
 await_response(Channel, Method, ROpt, Ref, Content) ->
-    await_response(Channel, Method, ROpt, Ref, Content, <<>>).
+    await_response(Channel, Method, ROpt, Ref, Content, ?DEFAULT_TIMEOUT).
 
-await_response(Channel, Method, ROpt, Ref, Content, Fragment) ->
+await_response(Channel, Method, ROpt, Ref, Content, Timeout) ->
+    await_response(Channel, Method, ROpt, Ref, Content, Timeout, <<>>).
+
+await_response(Channel, Method, ROpt, Ref, Content, Timeout, Fragment) ->
     receive
         {coap_response, _ChId, Channel, Ref, #coap_message{method={ok, continue}, options=Options}} ->
             case proplists:get_value(block1, Options) of
                 {Num, true, Size} ->
-                    request_block(Channel, Method, ROpt, {Num+1, false, Size}, Content)
+                    request_block(Channel, Method, ROpt, {Num+1, false, Size}, Content, Timeout)
             end;
         {coap_response, _ChId, Channel, Ref, Message=#coap_message{method={ok, Code}, options=Options, payload=Data}} ->
             case proplists:get_value(block2, Options) of
@@ -66,7 +74,7 @@ await_response(Channel, Method, ROpt, Ref, Content, Fragment) ->
                     % no payload for requests with Block2 with NUM != 0
                     {ok, Ref2} = coap_channel:send(Channel,
                         coap_message:request(con, Method, <<>>, [{block2, {Num+1, false, Size}}|ROpt])),
-                    await_response(Channel, Method, ROpt, Ref2, Content, <<Fragment/binary, Data/binary>>);
+                    await_response(Channel, Method, ROpt, Ref2, Content, Timeout, <<Fragment/binary, Data/binary>>);
                 _Else ->
                     % not segmented
                     return_response({ok, Code}, Message#coap_message{payload= <<Fragment/binary, Data/binary>>})
@@ -75,6 +83,9 @@ await_response(Channel, Method, ROpt, Ref, Content, Fragment) ->
             return_response(Code, Message);
         {coap_error, _ChId, Channel, Ref, reset} ->
             {error, reset}
+    after
+        Timeout ->
+            {error, connection_failed}
     end.
 
 return_response({ok, Code}, Message) ->
