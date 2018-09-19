@@ -139,8 +139,9 @@ process_request(ChId, Request, State) ->
     check_resource(ChId, Request, State).
 
 check_resource(ChId, Request, State=#state{prefix=Prefix, module=Module}) ->
+    Content = coap_message:get_content(Request),
     case invoke_callback(Module, coap_get,
-            [ChId, Prefix, uri_suffix(Prefix, Request), uri_query(Request)]) of
+            [ChId, Prefix, uri_suffix(Prefix, Request), uri_query(Request), Content]) of
         R1=#coap_content{} ->
             check_preconditions(ChId, Request, R1, State);
         R2={error, not_found} ->
@@ -199,12 +200,17 @@ handle_method(_ChId, Request, _Resource, State) ->
 handle_observe(ChId, Request=#coap_message{options=Options}, Content=#coap_content{},
         State=#state{prefix=Prefix, module=Module, observer=undefined}) ->
     % the first observe request from this user to this resource
-    case invoke_callback(Module, coap_observe, [ChId, Prefix, uri_suffix(Prefix, Request), requires_ack(Request)]) of
-        {ok, ObState} ->
+    case invoke_callback(Module, coap_observe, [ChId, Prefix, uri_suffix(Prefix, Request), requires_ack(Request), Content]) of
+        {ok, ObState, NewContent} ->
             Uri = proplists:get_value(uri_path, Options, []),
             pg2:create({coap_observer, Uri}),
             ok = pg2:join({coap_observer, Uri}, self()),
-            return_resource(Request, Content, State#state{observer=Request, obstate=ObState});
+            return_resource(Request, NewContent, State#state{observer=Request, obstate=ObState});
+        {ok, ObState, Code, NewContent} ->
+            Uri = proplists:get_value(uri_path, Options, []),
+            pg2:create({coap_observer, Uri}),
+            ok = pg2:join({coap_observer, Uri}, self()),
+            return_resource([], Request, {ok, Code}, NewContent, State#state{observer=Request, obstate=ObState});
         {error, method_not_allowed} ->
             % observe is not supported, fallback to standard get
             return_resource(Request, Content, State#state{observer=undefined});
@@ -253,6 +259,8 @@ handle_put(ChId, Request, Resource, State=#state{prefix=Prefix, module=Module}) 
             [ChId, Prefix, uri_suffix(Prefix, Request), Content]) of
         ok ->
             return_response(Request, created_or_changed(Resource), State);
+        {ok, Code, Content2} ->
+            return_resource([], Request, {ok, Code}, Content2, State);
         {error, Error} ->
             return_response(Request, {error, Error}, State);
         {error, Error, Reason} ->
