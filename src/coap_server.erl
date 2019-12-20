@@ -60,13 +60,13 @@ start_dtls(Name, DtlsOpts) ->
 start_dtls(Name, DtlsPort, DtlsOpts) ->
     supervisor:start_child(?MODULE,
         {Name,
-            {coap_dtls_listen, start_link, [DtlsPort, DtlsOpts]},
+            {coap_dtls_listen, start_link, [Name, DtlsPort, DtlsOpts]},
             transient, 5000, worker, []}).
 
 stop_dtls(Name) ->
     supervisor:terminate_child(?MODULE, Name),
-    supervisor:delete_child(?MODULE, Name).
-
+    supervisor:delete_child(?MODULE, Name),
+    coap_dtls_listen:stop(Name).
 
 channel_sup(SupPid) -> child(SupPid, coap_channel_sup_sup).
 

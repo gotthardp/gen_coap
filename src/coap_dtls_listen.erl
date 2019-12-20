@@ -9,14 +9,18 @@
 -module(coap_dtls_listen).
 -behaviour(supervisor).
 
--export([start_link/2, start_socket/0]).
+-export([start_link/3]).
 -export([init/1]).
 
-start_link(InPort, Opts) ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, [InPort, Opts]).
+-export([start_socket/0, stop/1]).
 
-init([InPort, Opts]) ->
+
+start_link(Name, InPort, Opts) ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, [Name, InPort, Opts]).
+
+init([Name, InPort, Opts]) ->
     {ok, ListenSocket} = ssl:listen(InPort, Opts++[binary, {protocol, dtls}, {reuseaddr, true}]),
+    persistent_term:put({?MODULE, Name}, ListenSocket),
     spawn_link(fun empty_listeners/0),
     {ok, {{simple_one_for_one, 60, 3600},
         [{socket,
@@ -30,5 +34,13 @@ start_socket() ->
 empty_listeners() ->
     [start_socket() || _ <- lists:seq(1,20)],
     ok.
+
+stop(Name) ->
+    case catch persistent_term:get({?MODULE, Name}) of
+        {'EXIT', _} -> ok;
+        Sock ->
+            ssl:close(Sock),
+            persistent_term:erase({?MODULE, Name})
+    end.
 
 % end of file
