@@ -17,3 +17,4 @@ examples/sample.iml
 gen_coap.iml
 rebar.lock
 .rebar3/
+.tags*
