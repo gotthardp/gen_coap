@@ -13,17 +13,20 @@
 -module(coap_udp_socket).
 -behaviour(gen_server).
 
--export([start_link/0, start_link/2, get_channel/2, close/1]).
+-export([start_link/0, start_link/1, start_link/3, get_channel/2, close/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, code_change/3, terminate/2]).
 
 -record(state, {sock, chans, pool}).
 
 % client
 start_link() ->
-    gen_server:start_link(?MODULE, [0], []).
+    start_link([]).
+start_link(Opts) ->
+    gen_server:start_link(?MODULE, [0, Opts], []).
+
 % server
-start_link(InPort, SupPid) ->
-    gen_server:start_link(?MODULE, [InPort, SupPid], []).
+start_link(InPort, Opts, SupPid) ->
+    gen_server:start_link(?MODULE, [InPort, Opts, SupPid], []).
 
 get_channel(Pid, {PeerIP, PeerPortNo}) ->
     gen_server:call(Pid, {get_channel, {PeerIP, PeerPortNo}}).
@@ -33,16 +36,20 @@ close(Pid) ->
     % should be terminated by the user (client)
     gen_server:cast(Pid, shutdown).
 
+init([InPort, Opts]) ->
+    case gen_udp:open(InPort, Opts ++ [binary, {active, true}, {reuseaddr, true}]) of
+        {ok, Socket} ->
+            {ok, #state{sock=Socket, chans=dict:new()}};
+        {error, eafnosupport} ->
+            io:fwrite("coap_udp_socket address family not supported by protocol.~n"),
+            {stop, eafnosupport};
+        {error, Reason} ->
+            {stop, Reason}
+    end;
 
-init([InPort]) ->
-    {ok, Socket} = gen_udp:open(InPort, [binary, {active, true}, {reuseaddr, true}]),
-    %{ok, InPort2} = inet:port(Socket),
-    %error_logger:info_msg("coap listen on *:~p~n", [InPort2]),
-    {ok, #state{sock=Socket, chans=dict:new()}};
-
-init([InPort, SupPid]) ->
+init([InPort, Opts, SupPid]) ->
     gen_server:cast(self(), {set_pool, SupPid}),
-    init([InPort]).
+    init([InPort, Opts]).
 
 handle_call({get_channel, ChId}, _From, State=#state{chans=Chans, pool=undefined}) ->
     case find_channel(ChId, Chans) of
@@ -97,7 +104,7 @@ handle_info({udp, _Socket, PeerIP, PeerPortNo, Data}, State=#state{chans=Chans, 
 handle_info({datagram, {PeerIP, PeerPortNo}, Data}, State=#state{sock=Socket}) ->
     ok = gen_udp:send(Socket, PeerIP, PeerPortNo, Data),
     {noreply, State};
-handle_info({terminated, SupPid, ChId}, State=#state{chans=Chans, pool = PoolId}) ->
+handle_info({terminated, _SupPid, ChId}, State=#state{chans=Chans, pool = PoolId}) ->
     Chans2 = dict:erase(ChId, Chans),
 %%  exit(SupPid, normal),
     coap_channel_sup_sup:delete_channel(PoolId, ChId),
