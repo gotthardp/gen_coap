@@ -3,8 +3,8 @@
 
 -behaviour(coap_resource).
 
--export([coap_discover/2, coap_get/4, coap_post/4, coap_put/4, coap_delete/3,
-    coap_observe/4, coap_unobserve/1, handle_info/2, coap_ack/2]).
+-export([coap_discover/2, coap_get/5, coap_post/4, coap_put/4, coap_delete/3,
+    coap_observe/5, coap_unobserve/1, handle_info/2, coap_ack/2]).
 
 -include("coap.hrl").
 
@@ -13,7 +13,7 @@ coap_discover(Prefix, _Args) ->
     io:format("discover ~p~n", [Prefix]),
     [{absolute, Prefix++Name, []} || Name <- mnesia:dirty_all_keys(resources)].
 
-coap_get(_ChId, Prefix, Name, Query) ->
+coap_get(_ChId, Prefix, Name, Query, _Content) ->
     io:format("get ~p ~p ~p~n", [Prefix, Name, Query]),
     case mnesia:dirty_read(resources, Name) of
         [{resources, Name, Resource}] -> Resource;
@@ -39,7 +39,7 @@ coap_delete(_ChId, Prefix, Name) ->
     coap_responder:notify(Prefix++Name, {error, not_found}),
     ok.
 
-coap_observe(_ChId, Prefix, Name, _Ack) ->
+coap_observe(_ChId, Prefix, Name, _Ack, _Content) ->
     io:format("observe ~p ~p~n", [Prefix, Name]),
     {ok, {state, Prefix, Name}}.
 
@@ -55,8 +55,8 @@ start() ->
     ok = application:start(mnesia),
     {atomic, ok} = mnesia:create_table(resources, []),
     {ok, _} = application:ensure_all_started(gen_coap),
-    {ok, _} = coap_server:start_udp(coap_udp_socket),
-    {ok, _} = coap_server:start_dtls(coap_dtls_socket, [{certfile, "cert.pem"}, {keyfile, "key.pem"}]),
+    {ok, _} = coap_server:start_udp(coap_udp_socket, 5687),
+    {ok, _} = coap_server:start_dtls(coap_dtls_socket, 5689, [{certfile, "cert.pem"}, {keyfile, "key.pem"}]),
     coap_server_registry:add_handler([], ?MODULE, undefined).
 
 % end of file
